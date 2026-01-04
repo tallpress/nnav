@@ -85,6 +85,12 @@ def load_context(context_path: str) -> dict[str, str | None]:
     help="Export format",
     show_default=True,
 )
+@click.option(
+    "--jetstream",
+    "-J",
+    is_flag=True,
+    help="JetStream browser mode (browse streams/consumers)",
+)
 def main(
     server: str | None,
     context: str | None,
@@ -94,6 +100,7 @@ def main(
     filter_type: str | None,
     export_file: Path | None,
     export_format: str,
+    jetstream: bool,
 ) -> None:
     """nnav - NATS Navigator.
 
@@ -103,6 +110,10 @@ def main(
     Headless mode (no TUI):
       nnav -i input.json -f "error" -e output.json
       nnav -i input.json -t REQ -e requests.json
+
+    JetStream mode:
+      nnav -J                    # Browse streams, select to watch
+      nnav -J -s nats://server   # Connect to specific server
     """
     # Headless mode: import + export
     if import_file and export_file:
@@ -119,6 +130,55 @@ def main(
 
     # Load config file
     config = load_config()
+
+    # JetStream browser mode
+    if jetstream:
+        from nnav.jetstream_app import JetStreamApp
+
+        # Determine server URL
+        js_server: str
+        js_user: str | None = None
+        js_password: str | None = None
+
+        if context:
+            ctx = load_context(context)
+            js_server = ctx["server_url"] or "nats://localhost:4222"
+            js_user = ctx["user"]
+            js_password = ctx["password"]
+        elif server:
+            js_server = server
+        elif config.connection.url:
+            js_server = config.connection.url
+            js_user = config.connection.user
+            js_password = config.connection.password
+        else:
+            js_server = "nats://localhost:4222"
+
+        js_app = JetStreamApp(
+            server_url=js_server,
+            user=js_user,
+            password=js_password,
+            theme=config.theme,
+            hide=config.hide,
+            columns=config.columns,
+            export_path=config.export_path,
+        )
+        js_config = js_app.run()
+
+        # If a stream was selected, launch watch mode
+        if js_config:
+            watch_app = NatsVisApp(
+                server_url=js_server,
+                user=js_user,
+                password=js_password,
+                theme=config.theme,
+                hide=config.hide,
+                columns=config.columns,
+                export_path=config.export_path,
+                jetstream_config=js_config,
+            )
+            watch_app.run()
+        return
 
     # TUI mode
     if import_file:

@@ -31,7 +31,8 @@ from textual.widgets.data_table import RowKey
 from textual.widgets.tree import TreeNode
 
 from nnav.config import ColumnsConfig, HideConfig
-from nnav.nats_client import MessageType, NatsMessage, NatsSubscriber
+from nnav.nats_client import JetStreamConfig, MessageType, NatsMessage, NatsSubscriber
+
 
 @dataclass
 class StoredMessage:
@@ -62,7 +63,7 @@ class HelpScreen(ModalScreen[None]):
         width: 70;
         height: auto;
         max-height: 90%;
-        border: thick $primary;
+        border: solid $primary;
         background: $surface;
         padding: 1 2;
     }
@@ -252,6 +253,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
         self._parsed_json: dict[str, object] | list[object] | None = None
         self._is_json = False
         self._current_path: str | None = None  # Track if showing a path query result
+        self._current_result: object = None  # Extracted result from path query
 
     def compose(self) -> ComposeResult:
         type_str = self.msg.message_type.value
@@ -294,7 +296,10 @@ class MessageDetailScreen(ModalScreen[int | None]):
                     )
                 if self.msg.headers:
                     for k, v in self.msg.headers.items():
-                        yield Label(f"{rich_escape(k)}: {rich_escape(str(v))}", classes="meta-row")
+                        yield Label(
+                            f"{rich_escape(k)}: {rich_escape(str(v))}",
+                            classes="meta-row",
+                        )
                 yield Label(
                     f"Payload Size: {len(self.msg.payload)} bytes", classes="meta-row"
                 )
@@ -329,9 +334,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
             self._parsed_json = json.loads(payload)
             self._is_json = True
             formatted = json.dumps(self._parsed_json, indent=2)
-            syntax = Syntax(
-                formatted, "json", theme=self.app.theme, line_numbers=False
-            )
+            syntax = Syntax(formatted, "json", theme=self.app.theme, line_numbers=False)
             widget.update(syntax)
         except json.JSONDecodeError:
             self._parsed_json = None
@@ -397,13 +400,22 @@ class MessageDetailScreen(ModalScreen[int | None]):
                 self.notify("No related message found", severity="warning")
 
     def action_copy_payload(self) -> None:
-        """Copy payload to clipboard."""
-        if self._is_json and self._parsed_json is not None:
+        """Copy payload to clipboard. Copies query result if path is active."""
+        if self._current_path is not None and self._current_result is not None:
+            # Copy the path query result
+            if isinstance(self._current_result, (dict, list)):
+                text = json.dumps(self._current_result, indent=2)
+            else:
+                text = str(self._current_result)
+            self._copy_to_clipboard(text)
+            self.notify(f"Copied: {self._current_path}")
+        elif self._is_json and self._parsed_json is not None:
             text = json.dumps(self._parsed_json, indent=2)
+            self._copy_to_clipboard(text)
+            self.notify("Payload copied to clipboard")
         else:
-            text = self.msg.payload
-        self._copy_to_clipboard(text)
-        self.notify("Payload copied to clipboard")
+            self._copy_to_clipboard(self.msg.payload)
+            self.notify("Payload copied to clipboard")
 
     def action_copy_subject(self) -> None:
         """Copy subject to clipboard."""
@@ -430,6 +442,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
     def _reset_to_full_payload(self) -> None:
         """Reset the display to show the full payload."""
         self._current_path = None
+        self._current_result = None
         payload_widget = self.query_one("#payload", Static)
         self._display_payload(payload_widget, self.msg.payload)
         path_label = self.query_one("#path-label", Label)
@@ -468,6 +481,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
         try:
             result = self._get_json_path(self._parsed_json, path)
             self._current_path = path
+            self._current_result = result
 
             # Update path label
             path_label.update(f"Query: {path}")
@@ -565,7 +579,7 @@ class DiffScreen(ModalScreen[None]):
     #diff-dialog {
         width: 90%;
         height: 90%;
-        border: thick $primary;
+        border: solid $primary;
         background: $surface;
         padding: 1 2;
     }
@@ -650,9 +664,7 @@ class DiffScreen(ModalScreen[None]):
         try:
             parsed = json.loads(payload)
             formatted = json.dumps(parsed, indent=2)
-            syntax = Syntax(
-                formatted, "json", theme=self.app.theme, line_numbers=False
-            )
+            syntax = Syntax(formatted, "json", theme=self.app.theme, line_numbers=False)
             widget.update(syntax)
         except json.JSONDecodeError:
             widget.update(payload)
@@ -674,7 +686,7 @@ class PublishScreen(ModalScreen[None]):
         width: 75%;
         height: auto;
         max-height: 80%;
-        border: thick $primary;
+        border: solid $primary;
         background: $surface;
         padding: 1 2;
     }
@@ -796,7 +808,7 @@ class ExportScreen(ModalScreen[None]):
     #export-dialog {
         width: 60%;
         height: auto;
-        border: thick $primary;
+        border: solid $primary;
         background: $surface;
         padding: 1 2;
     }
@@ -846,7 +858,9 @@ class ExportScreen(ModalScreen[None]):
         if self.default_path:
             initial_path = self.default_path
         else:
-            initial_path = f"~/nnav-export-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+            initial_path = (
+                f"~/nnav-export-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+            )
 
         with Container(id="export-dialog"):
             yield Label("Export Messages", id="export-title")
@@ -920,7 +934,7 @@ class ConnectionInfoScreen(ModalScreen[None]):
     #info-dialog {
         width: 60;
         height: auto;
-        border: thick $primary;
+        border: solid $primary;
         background: $surface;
         padding: 1 2;
     }
@@ -1009,7 +1023,7 @@ class SubjectTreeScreen(ModalScreen[str | None]):
     #tree-dialog {
         width: 70%;
         height: 80%;
-        border: thick $primary;
+        border: solid $primary;
         background: $surface;
         padding: 1 2;
     }
@@ -1187,6 +1201,7 @@ class NatsVisApp(App[None]):
         hide: HideConfig | None = None,
         columns: ColumnsConfig | None = None,
         export_path: str | None = None,
+        jetstream_config: JetStreamConfig | None = None,
     ) -> None:
         super().__init__()
         self.theme = theme
@@ -1197,6 +1212,7 @@ class NatsVisApp(App[None]):
         self.viewer_mode = import_file is not None
         self.server_url = server_url or ""
         self.subject = subject
+        self.jetstream_config = jetstream_config
         self.subscriber: NatsSubscriber | None = None
         if not self.viewer_mode and server_url:
             self.subscriber = NatsSubscriber(
@@ -1293,12 +1309,27 @@ class NatsVisApp(App[None]):
 
         try:
             await self.subscriber.connect()
-            self.sub_title = f"Connected to {self.server_url}"
 
-            async for msg in self.subscriber.subscribe_all():
-                if not self.paused:
-                    self._add_message(msg)
-                self._update_status()
+            if self.jetstream_config:
+                # JetStream mode
+                stream = self.jetstream_config.stream
+                policy = self.jetstream_config.deliver_policy.value
+                self.sub_title = f"JetStream: {stream} ({policy})"
+
+                async for msg in self.subscriber.subscribe_jetstream(
+                    self.jetstream_config
+                ):
+                    if not self.paused:
+                        self._add_message(msg)
+                    self._update_status()
+            else:
+                # Normal NATS subscription
+                self.sub_title = f"Connected to {self.server_url}"
+
+                async for msg in self.subscriber.subscribe_all():
+                    if not self.paused:
+                        self._add_message(msg)
+                    self._update_status()
 
         except Exception as e:
             self.sub_title = f"Error: {e}"
@@ -1824,7 +1855,9 @@ class NatsVisApp(App[None]):
     def action_export_filtered(self) -> None:
         """Export filtered messages only."""
         filtered = [self.messages[i] for i in self.filtered_indices]
-        self.push_screen(ExportScreen(filtered, filtered_only=True, default_path=self.export_path))
+        self.push_screen(
+            ExportScreen(filtered, filtered_only=True, default_path=self.export_path)
+        )
 
     def action_toggle_bookmark(self) -> None:
         """Toggle bookmark on current message."""

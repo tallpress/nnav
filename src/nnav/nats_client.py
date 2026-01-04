@@ -9,6 +9,7 @@ from enum import Enum
 import nats
 from nats.aio.client import Client
 from nats.aio.msg import Msg
+from nats.js.api import ConsumerConfig, DeliverPolicy
 
 
 class MessageType(Enum):
@@ -17,6 +18,24 @@ class MessageType(Enum):
     PUBLISH = "PUB"
     REQUEST = "REQ"
     RESPONSE = "RES"
+
+
+class JetStreamDeliverPolicy(Enum):
+    """Starting position for JetStream subscription."""
+
+    NEW = "new"  # Only new messages
+    ALL = "all"  # From beginning
+    LAST = "last"  # Last message only
+    BY_START_SEQ = "by_start_seq"  # From specific sequence
+
+
+@dataclass
+class JetStreamConfig:
+    """Configuration for JetStream subscription."""
+
+    stream: str
+    deliver_policy: JetStreamDeliverPolicy = JetStreamDeliverPolicy.NEW
+    start_sequence: int | None = None  # For BY_START_SEQ
 
 
 @dataclass
@@ -32,6 +51,9 @@ class NatsMessage:
     correlation_id: str | None = None
     latency_ms: float | None = None
     request_subject: str | None = None
+    # JetStream metadata
+    js_sequence: int | None = None
+    js_stream: str | None = None
 
 
 class RpcTracker:
@@ -189,4 +211,79 @@ class NatsSubscriber:
             reply_to=reply_to,
             headers=headers,
             message_type=msg_type,
+        )
+
+    async def subscribe_jetstream(
+        self, config: JetStreamConfig
+    ) -> AsyncIterator[NatsMessage]:
+        """Subscribe to a JetStream stream and yield messages."""
+        if not self._client:
+            raise RuntimeError("Not connected to NATS server")
+
+        js = self._client.jetstream()
+
+        # Map our policy to nats-py DeliverPolicy
+        if config.deliver_policy == JetStreamDeliverPolicy.NEW:
+            deliver_policy = DeliverPolicy.NEW
+            opt_start_seq = None
+        elif config.deliver_policy == JetStreamDeliverPolicy.ALL:
+            deliver_policy = DeliverPolicy.ALL
+            opt_start_seq = None
+        elif config.deliver_policy == JetStreamDeliverPolicy.LAST:
+            deliver_policy = DeliverPolicy.LAST
+            opt_start_seq = None
+        elif config.deliver_policy == JetStreamDeliverPolicy.BY_START_SEQ:
+            deliver_policy = DeliverPolicy.BY_START_SEQUENCE
+            opt_start_seq = config.start_sequence
+        else:
+            deliver_policy = DeliverPolicy.NEW
+            opt_start_seq = None
+
+        # Create consumer config
+        consumer_config = ConsumerConfig(
+            deliver_policy=deliver_policy,
+            opt_start_seq=opt_start_seq,
+        )
+
+        # Subscribe using push consumer for real-time delivery
+        sub = await js.subscribe(
+            subject=">",
+            stream=config.stream,
+            config=consumer_config,
+        )
+
+        try:
+            async for raw_msg in sub.messages:
+                msg = self._process_jetstream_message(raw_msg, config.stream)
+                yield msg
+        finally:
+            await sub.unsubscribe()
+
+    def _process_jetstream_message(self, raw_msg: Msg, stream: str) -> NatsMessage:
+        """Process a JetStream message into our format."""
+        try:
+            payload = raw_msg.data.decode("utf-8")
+        except UnicodeDecodeError:
+            payload = raw_msg.data.hex()
+
+        # Extract headers
+        headers: dict[str, str] = {}
+        if raw_msg.headers:
+            for key, value in raw_msg.headers.items():
+                headers[key] = value if isinstance(value, str) else str(value)
+
+        # Get JetStream metadata
+        js_sequence: int | None = None
+        if raw_msg.metadata:
+            js_sequence = raw_msg.metadata.sequence.stream
+
+        return NatsMessage(
+            subject=raw_msg.subject,
+            payload=payload,
+            timestamp=datetime.now(),
+            reply_to=None,
+            headers=headers,
+            message_type=MessageType.PUBLISH,
+            js_sequence=js_sequence,
+            js_stream=stream,
         )
