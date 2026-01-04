@@ -81,33 +81,6 @@ nnav -c ~/.config/nats/context/prod.json
 nnav --import session.json
 ```
 
-#### Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `j/k` | Navigate up/down |
-| `Enter` | View message details |
-| `/` | Filter messages |
-| `t` | Filter by type (REQ/RES/PUB) |
-| `T` | Subject tree browser |
-| `p` | Pause/Resume stream |
-| `m` | Bookmark message |
-| `n/N` | Next/Previous bookmark |
-| `d` | Diff two bookmarked messages |
-| `y` | Copy payload |
-| `e` | Export messages |
-| `F` | Toggle fullscreen |
-| `?` | Help |
-| `q` | Quit |
-
-#### Detail View
-
-| Key | Action |
-|-----|--------|
-| `j/k` | Scroll |
-| `/` | JSON path query (e.g., `.user.name`) |
-| `r` | Jump to related request/response |
-
 ### JetStream Mode
 
 Browse JetStream streams and consumers, then watch messages from any starting position.
@@ -122,17 +95,6 @@ nnav -J -s nats://myserver:4222
 # Use a context file
 nnav -J -c ~/.config/nats/context/prod.json
 ```
-
-#### Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `j/k` | Navigate streams |
-| `Enter` | Select stream (choose start position) |
-| `c` | View consumers for stream |
-| `r` | Refresh stream list |
-| `F` | Toggle fullscreen |
-| `q` | Quit |
 
 #### Start Positions
 
