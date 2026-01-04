@@ -1,5 +1,3 @@
-"""Textual TUI application for NATS message visualization."""
-
 import json
 import re
 import subprocess
@@ -93,7 +91,7 @@ class HelpScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Container(id="help-dialog"):
-            yield Label("NATS Visualizer - Keyboard Shortcuts", id="help-title")
+            yield Label("nnav - Keyboard Shortcuts", id="help-title")
 
             yield Label("Navigation", classes="help-section")
             yield Label("  j / ↓      Move down", classes="help-row")
@@ -336,7 +334,9 @@ class MessageDetailScreen(ModalScreen[int | None]):
             self._parsed_json = json.loads(payload)
             self._is_json = True
             formatted = json.dumps(self._parsed_json, indent=2)
-            syntax = Syntax(formatted, "json", theme=self.preview_theme, line_numbers=False)
+            syntax = Syntax(
+                formatted, "json", theme=self.preview_theme, line_numbers=False
+            )
             widget.update(syntax)
         except json.JSONDecodeError:
             self._parsed_json = None
@@ -622,7 +622,9 @@ class DiffScreen(ModalScreen[None]):
     }
     """
 
-    def __init__(self, msg1: NatsMessage, msg2: NatsMessage, preview_theme: str = "monokai") -> None:
+    def __init__(
+        self, msg1: NatsMessage, msg2: NatsMessage, preview_theme: str = "monokai"
+    ) -> None:
         super().__init__()
         self.msg1 = msg1
         self.msg2 = msg2
@@ -667,7 +669,9 @@ class DiffScreen(ModalScreen[None]):
         try:
             parsed = json.loads(payload)
             formatted = json.dumps(parsed, indent=2)
-            syntax = Syntax(formatted, "json", theme=self.preview_theme, line_numbers=False)
+            syntax = Syntax(
+                formatted, "json", theme=self.preview_theme, line_numbers=False
+            )
             widget.update(syntax)
         except json.JSONDecodeError:
             widget.update(payload)
@@ -1235,9 +1239,7 @@ class FilterInput(Input):
 
 
 class NatsVisApp(App[None]):
-    """A TUI application for visualizing NATS messages."""
-
-    TITLE = "NATS Message Visualizer"
+    TITLE = "nnav"
 
     CSS = """
     #main-container {
@@ -2081,7 +2083,9 @@ class NatsVisApp(App[None]):
             return
 
         # Use first two bookmarks
-        self.push_screen(DiffScreen(bookmarked[0].msg, bookmarked[1].msg, self.preview_theme))
+        self.push_screen(
+            DiffScreen(bookmarked[0].msg, bookmarked[1].msg, self.preview_theme)
+        )
 
     def action_copy_payload(self) -> None:
         """Copy selected message payload to clipboard."""
