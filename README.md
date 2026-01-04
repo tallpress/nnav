@@ -33,6 +33,8 @@ A terminal UI for exploring NATS messages with filtering, request/response match
 
 ## Installation
 
+You can run this in a few different ways. The recommended way is via the `uv` tool manager.
+
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
