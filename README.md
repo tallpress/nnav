@@ -1,8 +1,8 @@
-# nnav - NATS Navigator
+# nnav
 
-lnav for NATS, a terminal UI for exploring NATS messages with powerful filtering, request/response matching, and JSON tools.
+A terminal UI for exploring NATS messages with filtering, request/response matching, and JSON tools inspired by lnav (https://lnav.org/)
 
-## Table of Contents
+## Contents
 
 - [Features](#features)
 - [Limitations](#limitations)
@@ -22,13 +22,14 @@ lnav for NATS, a terminal UI for exploring NATS messages with powerful filtering
 - **Filtering** - By text, regex (`/pattern/`), message type, or subject pattern
 - **Subject tree browser** - Hierarchical view of subjects with message counts
 - **JSON tools** - Syntax highlighting, path queries (`.user.name`), message diff
-- **Import/Export** - Save sessions, share with colleagues, import NATS CLI output
+- **Import/Export** - Save sessions, share with friends, import NATS CLI output
 - **Headless mode** - Filter and export without TUI for scripting
-- **JetStream browser** - Browse streams/consumers, watch streams from any position
+- **JetStream mode** - Browse streams/consumers, watch streams from any position
 
 
 ## Limitations
-- Assumes message payloads are JSON
+- assumes message payloads are JSON
+- hasn't been tested with very high message rates
 
 ## Installation
 
@@ -165,7 +166,7 @@ nnav -i session.json -e output.ndjson --format ndjson
 
 ## Configuration
 
-nnav supports a configuration file at `~/.config/nnav/config.toml`:
+nnav can be configured at `~/.config/nnav/config.toml`:
 
 ```toml
 # Default export file path
