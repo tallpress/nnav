@@ -8,29 +8,30 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from rich.markup import escape as rich_escape
 from rich.style import Style
 from rich.syntax import Syntax
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import (
+    Button,
     DataTable,
     Footer,
     Header,
     Input,
     Label,
     Static,
-    Button,
     TextArea,
     Tree,
 )
-from textual.widgets.tree import TreeNode
 from textual.widgets.data_table import RowKey
+from textual.widgets.tree import TreeNode
 
+from nnav.config import ColumnsConfig, HideConfig
 from nnav.nats_client import MessageType, NatsMessage, NatsSubscriber
-
 
 @dataclass
 class StoredMessage:
@@ -103,12 +104,16 @@ class HelpScreen(ModalScreen[None]):
             yield Label("  N          Previous bookmarked message", classes="help-row")
 
             yield Label("Filtering & Search", classes="help-section")
-            yield Label("  /          Filter messages (text or /regex/)", classes="help-row")
+            yield Label(
+                "  /          Filter messages (text or /regex/)", classes="help-row"
+            )
             yield Label("  Escape     Clear filter", classes="help-row")
-            yield Label("  t          Filter by message type (REQ/RES/PUB)", classes="help-row")
+            yield Label(
+                "  t          Filter by message type (REQ/RES/PUB)", classes="help-row"
+            )
 
             yield Label("Actions", classes="help-section")
-            yield Label("  Space      Pause/Resume stream", classes="help-row")
+            yield Label("  p          Pause/Resume stream", classes="help-row")
             yield Label("  c          Clear all messages", classes="help-row")
             yield Label("  m          Toggle bookmark on message", classes="help-row")
             yield Label("  y          Copy payload to clipboard", classes="help-row")
@@ -116,8 +121,7 @@ class HelpScreen(ModalScreen[None]):
             yield Label("  r          Republish selected message", classes="help-row")
             yield Label("  d          Diff two bookmarked messages", classes="help-row")
 
-            yield Label("Publishing & Export", classes="help-section")
-            yield Label("  p          Publish new message", classes="help-row")
+            yield Label("Export", classes="help-section")
             yield Label("  e          Export messages to JSON", classes="help-row")
             yield Label("  E          Export filtered messages", classes="help-row")
 
@@ -131,7 +135,9 @@ class HelpScreen(ModalScreen[None]):
             yield Label("  j / k      Scroll down / up", classes="help-row")
             yield Label("  g / G      Scroll to top / bottom", classes="help-row")
             yield Label("  /          JSON path query", classes="help-row")
-            yield Label("  r          Jump to related request/response", classes="help-row")
+            yield Label(
+                "  r          Jump to related request/response", classes="help-row"
+            )
             yield Label("  y / Y      Copy payload / subject", classes="help-row")
 
             yield Label("Press any key to close", id="help-hint")
@@ -162,7 +168,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
     #dialog {
         width: 85%;
         height: 85%;
-        border: thick $primary;
+        border: solid $primary;
         background: $surface;
         padding: 1 2;
     }
@@ -262,13 +268,25 @@ class MessageDetailScreen(ModalScreen[int | None]):
                     classes="meta-row",
                 )
                 if self.msg.reply_to:
-                    yield Label(f"Reply-To: {self.msg.reply_to}", classes="meta-row meta-request")
+                    yield Label(
+                        f"Reply-To: {self.msg.reply_to}",
+                        classes="meta-row meta-request",
+                    )
                     if self.stored.related_index is not None:
-                        yield Label("  → Press 'r' to view response", classes="meta-row meta-latency")
+                        yield Label(
+                            "  → Press 'r' to view response",
+                            classes="meta-row meta-latency",
+                        )
                 if self.msg.request_subject:
-                    yield Label(f"Request Subject: {self.msg.request_subject}", classes="meta-row")
+                    yield Label(
+                        f"Request Subject: {self.msg.request_subject}",
+                        classes="meta-row",
+                    )
                     if self.stored.related_index is not None:
-                        yield Label("  → Press 'r' to view original request", classes="meta-row meta-latency")
+                        yield Label(
+                            "  → Press 'r' to view original request",
+                            classes="meta-row meta-latency",
+                        )
                 if self.msg.latency_ms is not None:
                     yield Label(
                         f"Response Latency: {self.msg.latency_ms:.2f}ms",
@@ -276,8 +294,10 @@ class MessageDetailScreen(ModalScreen[int | None]):
                     )
                 if self.msg.headers:
                     for k, v in self.msg.headers.items():
-                        yield Label(f"Header [{k}]: {v}", classes="meta-row")
-                yield Label(f"Payload Size: {len(self.msg.payload)} bytes", classes="meta-row")
+                        yield Label(f"{rich_escape(k)}: {rich_escape(str(v))}", classes="meta-row")
+                yield Label(
+                    f"Payload Size: {len(self.msg.payload)} bytes", classes="meta-row"
+                )
 
             yield Label("", id="path-label")
             with ScrollableContainer(id="payload-container"):
@@ -285,7 +305,10 @@ class MessageDetailScreen(ModalScreen[int | None]):
 
             with Vertical(id="bottom-bar"):
                 with Vertical(id="json-path-container"):
-                    yield Input(placeholder="Path: .user.name or .items[0] (empty to reset)", id="json-path-input")
+                    yield Input(
+                        placeholder="Path: .user.name or .items[0] (empty to reset)",
+                        id="json-path-input",
+                    )
 
                 hint_parts = ["q: close", "y: copy", "/: query", "jk: scroll"]
                 if self.stored.related_index is not None:
@@ -306,7 +329,9 @@ class MessageDetailScreen(ModalScreen[int | None]):
             self._parsed_json = json.loads(payload)
             self._is_json = True
             formatted = json.dumps(self._parsed_json, indent=2)
-            syntax = Syntax(formatted, "json", theme="monokai", line_numbers=False)
+            syntax = Syntax(
+                formatted, "json", theme=self.app.theme, line_numbers=False
+            )
             widget.update(syntax)
         except json.JSONDecodeError:
             self._parsed_json = None
@@ -451,7 +476,9 @@ class MessageDetailScreen(ModalScreen[int | None]):
             # Display result in main payload area
             if isinstance(result, (dict, list)):
                 formatted = json.dumps(result, indent=2)
-                syntax = Syntax(formatted, "json", theme="monokai", line_numbers=False)
+                syntax = Syntax(
+                    formatted, "json", theme=self.app.theme, line_numbers=False
+                )
                 payload_widget.update(syntax)
             elif isinstance(result, str):
                 # String value - show as-is
@@ -479,7 +506,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
         current: object = data
 
         # Tokenize the path - match either .key or [index]
-        tokens = re.findall(r'\.?([^.\[\]]+)|\[(\d+)\]', path)
+        tokens = re.findall(r"\.?([^.\[\]]+)|\[(\d+)\]", path)
 
         for token in tokens:
             key, index = token
@@ -489,15 +516,21 @@ class MessageDetailScreen(ModalScreen[int | None]):
                         raise KeyError(f"Key '{key}' not found")
                     current = current[key]
                 else:
-                    raise TypeError(f"Cannot access key '{key}' on {type(current).__name__}")
+                    raise TypeError(
+                        f"Cannot access key '{key}' on {type(current).__name__}"
+                    )
             elif index:  # It's an index access
                 idx = int(index)
                 if isinstance(current, list):
                     if idx >= len(current) or idx < -len(current):
-                        raise IndexError(f"Index {idx} out of range (length {len(current)})")
+                        raise IndexError(
+                            f"Index {idx} out of range (length {len(current)})"
+                        )
                     current = current[idx]
                 else:
-                    raise TypeError(f"Cannot access index [{idx}] on {type(current).__name__}")
+                    raise TypeError(
+                        f"Cannot access index [{idx}] on {type(current).__name__}"
+                    )
 
         return current
 
@@ -584,13 +617,25 @@ class DiffScreen(ModalScreen[None]):
 
             with Horizontal(id="diff-container"):
                 with Vertical(classes="diff-pane"):
-                    yield Label(f"[{self.msg1.message_type.value}] {self.msg1.subject}", classes="diff-header")
-                    yield Label(f"Time: {self.msg1.timestamp.strftime('%H:%M:%S.%f')[:-3]}", classes="diff-header")
+                    yield Label(
+                        f"[{self.msg1.message_type.value}] {self.msg1.subject}",
+                        classes="diff-header",
+                    )
+                    yield Label(
+                        f"Time: {self.msg1.timestamp.strftime('%H:%M:%S.%f')[:-3]}",
+                        classes="diff-header",
+                    )
                     yield Static(id="diff-left", classes="diff-content")
 
                 with Vertical(classes="diff-pane"):
-                    yield Label(f"[{self.msg2.message_type.value}] {self.msg2.subject}", classes="diff-header")
-                    yield Label(f"Time: {self.msg2.timestamp.strftime('%H:%M:%S.%f')[:-3]}", classes="diff-header")
+                    yield Label(
+                        f"[{self.msg2.message_type.value}] {self.msg2.subject}",
+                        classes="diff-header",
+                    )
+                    yield Label(
+                        f"Time: {self.msg2.timestamp.strftime('%H:%M:%S.%f')[:-3]}",
+                        classes="diff-header",
+                    )
                     yield Static(id="diff-right", classes="diff-content")
 
     def on_mount(self) -> None:
@@ -605,7 +650,9 @@ class DiffScreen(ModalScreen[None]):
         try:
             parsed = json.loads(payload)
             formatted = json.dumps(parsed, indent=2)
-            syntax = Syntax(formatted, "json", theme="monokai", line_numbers=False)
+            syntax = Syntax(
+                formatted, "json", theme=self.app.theme, line_numbers=False
+            )
             widget.update(syntax)
         except json.JSONDecodeError:
             widget.update(payload)
@@ -683,7 +730,9 @@ class PublishScreen(ModalScreen[None]):
                 id="subject-input",
             )
 
-            yield Label("Reply-To (optional, for request-reply):", classes="field-label")
+            yield Label(
+                "Reply-To (optional, for request-reply):", classes="field-label"
+            )
             yield Input(
                 placeholder="Leave empty for fire-and-forget",
                 id="reply-input",
@@ -691,7 +740,7 @@ class PublishScreen(ModalScreen[None]):
 
             yield Label("Payload (JSON or text):", classes="field-label")
             yield TextArea(
-                self.default_payload or '{\n  \n}',
+                self.default_payload or "{\n  \n}",
                 id="payload-input",
                 language="json",
             )
@@ -778,14 +827,26 @@ class ExportScreen(ModalScreen[None]):
     }
     """
 
-    def __init__(self, messages: list["StoredMessage"], filtered_only: bool = False) -> None:
+    def __init__(
+        self,
+        messages: list["StoredMessage"],
+        filtered_only: bool = False,
+        default_path: str | None = None,
+    ) -> None:
         super().__init__()
         self.messages = messages
         self.filtered_only = filtered_only
+        self.default_path = default_path
 
     def compose(self) -> ComposeResult:
         count = len(self.messages)
         label = "filtered messages" if self.filtered_only else "all messages"
+
+        # Use configured default or generate timestamped filename
+        if self.default_path:
+            initial_path = self.default_path
+        else:
+            initial_path = f"~/nnav-export-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
 
         with Container(id="export-dialog"):
             yield Label("Export Messages", id="export-title")
@@ -793,8 +854,8 @@ class ExportScreen(ModalScreen[None]):
 
             yield Label("File path:", classes="field-label")
             yield Input(
-                placeholder="~/nats-export.json",
-                value=f"~/nats-export-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json",
+                placeholder="~/nnav-export.json",
+                value=initial_path,
                 id="path-input",
             )
 
@@ -891,7 +952,9 @@ class ConnectionInfoScreen(ModalScreen[None]):
     }
     """
 
-    def __init__(self, subscriber: NatsSubscriber, subject: str, message_count: int) -> None:
+    def __init__(
+        self, subscriber: NatsSubscriber, subject: str, message_count: int
+    ) -> None:
         super().__init__()
         self.subscriber = subscriber
         self.subject = subject
@@ -909,7 +972,10 @@ class ConnectionInfoScreen(ModalScreen[None]):
             yield Label(f"Status: {status}", classes=f"info-row {status_class}")
             yield Label(f"Subject Filter: {self.subject}", classes="info-row")
             yield Label(f"Messages Received: {self.message_count}", classes="info-row")
-            yield Label(f"Pending RPC: {self.subscriber.rpc_tracker.pending_count}", classes="info-row")
+            yield Label(
+                f"Pending RPC: {self.subscriber.rpc_tracker.pending_count}",
+                classes="info-row",
+            )
 
             if self.subscriber.user:
                 yield Label(f"User: {self.subscriber.user}", classes="info-row")
@@ -988,7 +1054,9 @@ class SubjectTreeScreen(ModalScreen[str | None]):
         for child in tree.root.children:
             child.expand()
 
-    def _populate_tree(self, tree_node: TreeNode[str], subject_node: SubjectNode) -> None:
+    def _populate_tree(
+        self, tree_node: TreeNode[str], subject_node: SubjectNode
+    ) -> None:
         """Recursively add children to the tree."""
         # Sort by name
         for name in sorted(subject_node.children.keys()):
@@ -1087,12 +1155,11 @@ class NatsVisApp(App[None]):
         Binding("q", "quit", "Quit"),
         Binding("?", "help", "Help"),
         Binding("c", "clear", "Clear"),
-        Binding("space", "toggle_pause", "Pause"),
+        Binding("p", "toggle_pause", "Pause"),
         Binding("slash", "start_filter", "Filter"),
         Binding("escape", "clear_filter", "Clear Filter", show=False),
         Binding("t", "filter_type", "Type Filter"),
         Binding("i", "connection_info", "Info"),
-        Binding("p", "publish", "Publish"),
         Binding("r", "republish", "Republish", show=False),
         Binding("e", "export", "Export"),
         Binding("E", "export_filtered", "Export Filtered", show=False),
@@ -1116,8 +1183,16 @@ class NatsVisApp(App[None]):
         password: str | None = None,
         subject: str = ">",
         import_file: Path | None = None,
+        theme: str = "monokai",
+        hide: HideConfig | None = None,
+        columns: ColumnsConfig | None = None,
+        export_path: str | None = None,
     ) -> None:
         super().__init__()
+        self.theme = theme
+        self.hide = hide or HideConfig()
+        self.columns = columns or ColumnsConfig()
+        self.export_path = export_path
         self.import_file = import_file
         self.viewer_mode = import_file is not None
         self.server_url = server_url or ""
@@ -1149,7 +1224,21 @@ class NatsVisApp(App[None]):
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        table.add_columns("★", "Time", "Type", "Subject", "Latency", "Payload")
+        # Build columns based on config
+        cols = []
+        if self.columns.marker:
+            cols.append("★")
+        if self.columns.time:
+            cols.append("Time")
+        if self.columns.type:
+            cols.append("Type")
+        if self.columns.subject:
+            cols.append("Subject")
+        if self.columns.latency:
+            cols.append("Latency")
+        if self.columns.payload:
+            cols.append("Payload")
+        table.add_columns(*cols)
         table.cursor_type = "row"
 
         if self.viewer_mode and self.import_file:
@@ -1243,7 +1332,11 @@ class NatsVisApp(App[None]):
 
     def _import_json_format(self, data: list[dict[str, object]]) -> None:
         """Import messages from our JSON export format."""
-        type_map = {"PUB": MessageType.PUBLISH, "REQ": MessageType.REQUEST, "RES": MessageType.RESPONSE}
+        type_map = {
+            "PUB": MessageType.PUBLISH,
+            "REQ": MessageType.REQUEST,
+            "RES": MessageType.RESPONSE,
+        }
 
         for item in data:
             try:
@@ -1260,7 +1353,11 @@ class NatsVisApp(App[None]):
 
                 # Parse headers
                 headers_raw = item.get("headers", {})
-                headers = {str(k): str(v) for k, v in headers_raw.items()} if isinstance(headers_raw, dict) else {}
+                headers = (
+                    {str(k): str(v) for k, v in headers_raw.items()}
+                    if isinstance(headers_raw, dict)
+                    else {}
+                )
 
                 # Parse latency
                 latency_raw = item.get("latency_ms")
@@ -1275,11 +1372,15 @@ class NatsVisApp(App[None]):
                     subject=str(item.get("subject", "")),
                     payload=str(item.get("payload", "")),
                     timestamp=timestamp,
-                    reply_to=str(item.get("reply_to")) if item.get("reply_to") else None,
+                    reply_to=str(item.get("reply_to"))
+                    if item.get("reply_to")
+                    else None,
                     headers=headers,
                     message_type=msg_type,
                     latency_ms=latency_ms,
-                    request_subject=str(item.get("request_subject")) if item.get("request_subject") else None,
+                    request_subject=str(item.get("request_subject"))
+                    if item.get("request_subject")
+                    else None,
                 )
                 self._add_message(msg, imported=True)
             except Exception:
@@ -1360,14 +1461,16 @@ class NatsVisApp(App[None]):
                 msg_type = MessageType.PUBLISH
 
             if subject:
-                messages.append(NatsMessage(
-                    subject=subject,
-                    payload=payload,
-                    timestamp=datetime.now(),
-                    reply_to=reply_to,
-                    headers=headers,
-                    message_type=msg_type,
-                ))
+                messages.append(
+                    NatsMessage(
+                        subject=subject,
+                        payload=payload,
+                        timestamp=datetime.now(),
+                        reply_to=reply_to,
+                        headers=headers,
+                        message_type=msg_type,
+                    )
+                )
 
         return messages
 
@@ -1393,7 +1496,10 @@ class NatsVisApp(App[None]):
             # This is a request - track it for later matching
             self._pending_requests[msg.reply_to] = msg_index
 
-        if msg.subject.startswith("_INBOX.") or msg.message_type == MessageType.RESPONSE:
+        if (
+            msg.subject.startswith("_INBOX.")
+            or msg.message_type == MessageType.RESPONSE
+        ):
             # This might be a response - check if we have the matching request
             if msg.subject in self._pending_requests:
                 request_index = self._pending_requests.pop(msg.subject)
@@ -1401,16 +1507,33 @@ class NatsVisApp(App[None]):
                 stored.related_index = request_index
                 self.messages[request_index].related_index = msg_index
 
+        # Check if internal message should be hidden (but RPC tracking above still happens)
+        if self.hide.inbox and msg.subject.startswith("_INBOX."):
+            return
+        if self.hide.jetstream and msg.subject.startswith("$JS."):
+            return
+
         # Check filters
         if not self._matches_filter(msg):
             return
 
-        # First column: imported marker (dimmed "I") or empty
+        # Build row data based on enabled columns
         marker = Text("I", style=Style(color="bright_black")) if imported else ""
+        row_data: list[str | Text] = []
+        if self.columns.marker:
+            row_data.append(marker)
+        if self.columns.time:
+            row_data.append(time_str)
+        if self.columns.type:
+            row_data.append(type_str)
+        if self.columns.subject:
+            row_data.append(msg.subject)
+        if self.columns.latency:
+            row_data.append(latency_str)
+        if self.columns.payload:
+            row_data.append(payload_display)
 
-        row_key = table.add_row(
-            marker, time_str, type_str, msg.subject, latency_str, payload_display
-        )
+        row_key = table.add_row(*row_data)
         stored.row_key = row_key
         self.filtered_indices.append(msg_index)
 
@@ -1450,7 +1573,9 @@ class NatsVisApp(App[None]):
         # Convert NATS wildcards to regex
         # * matches a single token (no dots)
         # > matches one or more tokens (greedy, only at end)
-        regex_pattern = pattern.replace(".", r"\.").replace("*", r"[^.]+").replace(">", r".+")
+        regex_pattern = (
+            pattern.replace(".", r"\.").replace("*", r"[^.]+").replace(">", r".+")
+        )
         try:
             return bool(re.match(f"^{regex_pattern}$", subject))
         except re.error:
@@ -1491,6 +1616,7 @@ class NatsVisApp(App[None]):
 
     def _show_message_detail(self, stored: StoredMessage) -> None:
         """Show the message detail screen and handle navigation."""
+
         def handle_result(result: int | None) -> None:
             if result is not None and 0 <= result < len(self.messages):
                 # Navigate to the related message
@@ -1505,7 +1631,11 @@ class NatsVisApp(App[None]):
             self.filter_text = event.value
 
             # Check if regex pattern (surrounded by /)
-            if event.value.startswith("/") and event.value.endswith("/") and len(event.value) > 2:
+            if (
+                event.value.startswith("/")
+                and event.value.endswith("/")
+                and len(event.value) > 2
+            ):
                 try:
                     self.filter_regex = re.compile(event.value[1:-1], re.IGNORECASE)
                 except re.error:
@@ -1526,6 +1656,15 @@ class NatsVisApp(App[None]):
 
         for i, stored in enumerate(self.messages):
             msg = stored.msg
+
+            # Skip internal messages if hidden
+            if self.hide.inbox and msg.subject.startswith("_INBOX."):
+                stored.row_key = None
+                continue
+            if self.hide.jetstream and msg.subject.startswith("$JS."):
+                stored.row_key = None
+                continue
+
             if self._matches_filter(msg):
                 time_str = msg.timestamp.strftime("%H:%M:%S.%f")[:-3]
                 type_str = msg.message_type.value
@@ -1542,9 +1681,22 @@ class NatsVisApp(App[None]):
                 else:
                     marker = Text("")
 
-                row_key = table.add_row(
-                    marker, time_str, type_str, msg.subject, latency_str, payload_display
-                )
+                # Build row data based on enabled columns
+                row_data: list[str | Text] = []
+                if self.columns.marker:
+                    row_data.append(marker)
+                if self.columns.time:
+                    row_data.append(time_str)
+                if self.columns.type:
+                    row_data.append(type_str)
+                if self.columns.subject:
+                    row_data.append(msg.subject)
+                if self.columns.latency:
+                    row_data.append(latency_str)
+                if self.columns.payload:
+                    row_data.append(payload_display)
+
+                row_key = table.add_row(*row_data)
                 stored.row_key = row_key
                 self.filtered_indices.append(i)
 
@@ -1552,6 +1704,10 @@ class NatsVisApp(App[None]):
 
     def _update_bookmark_display(self, stored: StoredMessage) -> None:
         """Update the bookmark marker for a row."""
+        # Only update if marker column is enabled
+        if not self.columns.marker:
+            return
+
         table = self.query_one(DataTable)
         if stored.row_key is not None:
             # Bookmark takes precedence, then imported marker
@@ -1561,7 +1717,7 @@ class NatsVisApp(App[None]):
                 marker = Text("I", style=Style(color="bright_black"))
             else:
                 marker = Text("")
-            # Get column key for first column
+            # Get column key for first column (marker column)
             columns = list(table.columns.keys())
             if columns:
                 table.update_cell(stored.row_key, columns[0], marker)
@@ -1597,7 +1753,7 @@ class NatsVisApp(App[None]):
         self.paused = not self.paused
         self._update_status()
         if self.paused:
-            self.notify("Paused - press Space to resume")
+            self.notify("Paused - press p to resume")
         else:
             self.notify("Resumed")
 
@@ -1637,19 +1793,14 @@ class NatsVisApp(App[None]):
     def action_connection_info(self) -> None:
         """Show connection info screen."""
         if self.viewer_mode:
-            self.notify(f"Viewing: {self.import_file.name if self.import_file else 'unknown'} | {len(self.messages)} messages")
+            self.notify(
+                f"Viewing: {self.import_file.name if self.import_file else 'unknown'} | {len(self.messages)} messages"
+            )
             return
         if self.subscriber:
             self.push_screen(
                 ConnectionInfoScreen(self.subscriber, self.subject, len(self.messages))
             )
-
-    def action_publish(self) -> None:
-        """Open publish dialog."""
-        if self.viewer_mode or not self.subscriber:
-            self.notify("Not available in viewer mode", severity="warning")
-            return
-        self.push_screen(PublishScreen(self.subscriber))
 
     def action_republish(self) -> None:
         """Republish the selected message."""
@@ -1659,17 +1810,21 @@ class NatsVisApp(App[None]):
         msg = self._get_selected_message()
         if msg:
             self.push_screen(
-                PublishScreen(self.subscriber, default_subject=msg.subject, default_payload=msg.payload)
+                PublishScreen(
+                    self.subscriber,
+                    default_subject=msg.subject,
+                    default_payload=msg.payload,
+                )
             )
 
     def action_export(self) -> None:
         """Export all messages."""
-        self.push_screen(ExportScreen(self.messages))
+        self.push_screen(ExportScreen(self.messages, default_path=self.export_path))
 
     def action_export_filtered(self) -> None:
         """Export filtered messages only."""
         filtered = [self.messages[i] for i in self.filtered_indices]
-        self.push_screen(ExportScreen(filtered, filtered_only=True))
+        self.push_screen(ExportScreen(filtered, filtered_only=True, default_path=self.export_path))
 
     def action_toggle_bookmark(self) -> None:
         """Toggle bookmark on current message."""
@@ -1745,10 +1900,14 @@ class NatsVisApp(App[None]):
 
     def action_diff_bookmarks(self) -> None:
         """Diff two bookmarked messages."""
-        bookmarked = [self.messages[i] for i in self.bookmark_indices if i < len(self.messages)]
+        bookmarked = [
+            self.messages[i] for i in self.bookmark_indices if i < len(self.messages)
+        ]
 
         if len(bookmarked) < 2:
-            self.notify("Need at least 2 bookmarked messages to diff", severity="warning")
+            self.notify(
+                "Need at least 2 bookmarked messages to diff", severity="warning"
+            )
             return
 
         # Use first two bookmarks
@@ -1810,6 +1969,13 @@ class NatsVisApp(App[None]):
 
         for stored in self.messages:
             subject = stored.msg.subject
+
+            # Skip hidden subjects
+            if self.hide.inbox and subject.startswith("_INBOX."):
+                continue
+            if self.hide.jetstream and subject.startswith("$JS."):
+                continue
+
             parts = subject.split(".")
             current = root
 

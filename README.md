@@ -1,6 +1,6 @@
 # nnav - NATS Navigator
 
-A terminal UI for visualizing and debugging NATS messages in real-time.
+lnav for NATS, a terminal UI for exploring NATS messages with powerful filtering, request/response matching, and JSON tools.
 
 ## Features
 
@@ -11,6 +11,10 @@ A terminal UI for visualizing and debugging NATS messages in real-time.
 - **JSON tools** - Syntax highlighting, path queries (`.user.name`), message diff
 - **Import/Export** - Save sessions, share with colleagues, import NATS CLI output
 - **Headless mode** - Filter and export without TUI for scripting
+
+
+## Limitations
+- Assumes message payloads are JSON
 
 ## Installation
 
@@ -71,13 +75,12 @@ nnav -i input.json -t REQ -e requests.json
 | `/` | Filter messages |
 | `t` | Filter by type (REQ/RES/PUB) |
 | `T` | Subject tree browser |
-| `Space` | Pause/Resume stream |
+| `p` | Pause/Resume stream |
 | `m` | Bookmark message |
 | `n/N` | Next/Previous bookmark |
 | `d` | Diff two bookmarked messages |
 | `y` | Copy payload |
 | `e` | Export messages |
-| `p` | Publish message |
 | `?` | Help |
 | `q` | Quit |
 
@@ -91,13 +94,56 @@ nnav -i input.json -t REQ -e requests.json
 
 ## Context File Format
 
+This supports the standard NATS CLI context file format:
+
 ```json
 {
   "url": "nats://myserver:4222",
   "user": "myuser",
   "password": "mypassword"
+  ...
 }
 ```
+
+## Configuration
+
+nnav supports a configuration file at `~/.config/nnav/config.toml`:
+
+```toml
+# Syntax highlighting theme (any Pygments theme)
+theme = "monokai"
+
+# Default export file path
+export_path = "~/nats-exports/session.json"
+
+# Default connection (used when no --server or --context provided)
+[connection]
+url = "nats://localhost:4222"
+user = "myuser"
+password = "mypassword"
+
+# Hide internal subjects from display (RPC correlation still works)
+[hide]
+inbox = true       # Hide _INBOX.* subjects
+jetstream = true   # Hide $JS.* subjects
+
+# Configure which columns to display
+[columns]
+marker = true      # Bookmark/import marker (★, I)
+time = true        # Timestamp
+type = true        # Message type (REQ/RES/PUB)
+subject = true     # NATS subject
+latency = true     # Response latency
+payload = true     # Message payload preview
+```
+
+All settings are optional - defaults are used for missing values.
+
+### Available Themes
+
+Dark: `monokai`, `dracula`, `one-dark`, `nord`, `gruvbox-dark`, `material`, `native`, `vim`
+
+Light: `github-light`, `gruvbox-light`, `solarized-light`, `vs`, `friendly`
 
 ## Headless Mode
 
@@ -138,9 +184,6 @@ nnav -i capture.txt
 git clone https://github.com/tallpress/nnav.git
 cd nnav
 uv sync
-uv run nnav              # Run
-make config-check        # Type check
-make test                # Run tests
 ```
 
 ## License

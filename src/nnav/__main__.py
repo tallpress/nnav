@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from nnav.app import NatsVisApp
+from nnav.config import load_config
 
 
 def load_context(context_path: str) -> dict[str, str | None]:
@@ -116,24 +117,62 @@ def main(
         )
         return
 
+    # Load config file
+    config = load_config()
+
     # TUI mode
     if import_file:
         # Viewer mode - no NATS connection needed
-        app = NatsVisApp(import_file=import_file)
-    elif context:
-        config = load_context(context)
         app = NatsVisApp(
-            server_url=config["server_url"],
-            user=config["user"],
-            password=config["password"],
+            import_file=import_file,
+            theme=config.theme,
+            hide=config.hide,
+            columns=config.columns,
+            export_path=config.export_path,
+        )
+    elif context:
+        ctx = load_context(context)
+        app = NatsVisApp(
+            server_url=ctx["server_url"],
+            user=ctx["user"],
+            password=ctx["password"],
             subject=subject,
+            theme=config.theme,
+            hide=config.hide,
+            columns=config.columns,
+            export_path=config.export_path,
+        )
+    elif server:
+        # CLI --server flag
+        app = NatsVisApp(
+            server_url=server,
+            subject=subject,
+            theme=config.theme,
+            hide=config.hide,
+            columns=config.columns,
+            export_path=config.export_path,
+        )
+    elif config.connection.url:
+        # Config file connection
+        app = NatsVisApp(
+            server_url=config.connection.url,
+            user=config.connection.user,
+            password=config.connection.password,
+            subject=subject,
+            theme=config.theme,
+            hide=config.hide,
+            columns=config.columns,
+            export_path=config.export_path,
         )
     else:
+        # Default localhost
         app = NatsVisApp(
-            server_url=server or "nats://localhost:4222",
-            user=None,
-            password=None,
+            server_url="nats://localhost:4222",
             subject=subject,
+            theme=config.theme,
+            hide=config.hide,
+            columns=config.columns,
+            export_path=config.export_path,
         )
     app.run()
 

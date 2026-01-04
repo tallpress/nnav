@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Caches
+.mypy_cache/
+.pytest_cache/
+
+# Test/debug data (may contain real NATS messages)
+*.ndjson
