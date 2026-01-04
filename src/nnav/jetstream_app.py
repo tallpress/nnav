@@ -251,7 +251,16 @@ class ConsumerListScreen(ModalScreen[None]):
 class FilterInput(Input):
     """Input widget for filtering streams."""
 
-    pass
+    CSS = """
+    FilterInput {
+        dock: top;
+        display: none;
+    }
+
+    FilterInput.visible {
+        display: block;
+    }
+    """
 
 
 class JetStreamApp(App[JetStreamConfig | None]):
@@ -260,15 +269,6 @@ class JetStreamApp(App[JetStreamConfig | None]):
     TITLE = "JetStream Browser"
 
     CSS = """
-    #filter {
-        dock: top;
-        display: none;
-    }
-
-    #filter.visible {
-        display: block;
-    }
-
     #main-container {
         height: 1fr;
     }
@@ -283,6 +283,18 @@ class JetStreamApp(App[JetStreamConfig | None]):
         padding: 0 1;
         background: $primary-background;
     }
+
+    .fullscreen Header {
+        display: none;
+    }
+
+    .fullscreen Footer {
+        display: none;
+    }
+
+    .fullscreen #status-bar {
+        display: none;
+    }
     """
 
     BINDINGS = [
@@ -291,6 +303,7 @@ class JetStreamApp(App[JetStreamConfig | None]):
         Binding("c", "view_consumers", "Consumers"),
         Binding("slash", "start_filter", "Filter"),
         Binding("escape", "clear_filter", "Clear Filter", show=False),
+        Binding("F", "toggle_fullscreen", "Fullscreen"),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("g", "cursor_top", "Top", show=False),
@@ -302,7 +315,9 @@ class JetStreamApp(App[JetStreamConfig | None]):
         server_url: str,
         user: str | None = None,
         password: str | None = None,
-        theme: str = "monokai",
+        preview_theme: str = "monokai",
+        textual_theme: str = "textual-dark",
+        fullscreen: bool = False,
         hide: HideConfig | None = None,
         columns: ColumnsConfig | None = None,
         export_path: str | None = None,
@@ -311,7 +326,9 @@ class JetStreamApp(App[JetStreamConfig | None]):
         self.server_url = server_url
         self.user = user
         self.password = password
-        self._theme = theme
+        self.theme = textual_theme
+        self.preview_theme = preview_theme
+        self._fullscreen = fullscreen
         self.hide = hide or HideConfig()
         self.columns = columns or ColumnsConfig()
         self.export_path = export_path
@@ -335,7 +352,13 @@ class JetStreamApp(App[JetStreamConfig | None]):
         table = self.query_one(DataTable)
         table.add_columns("Stream", "Messages", "Bytes", "Subjects", "Consumers")
         table.cursor_type = "row"
-        table.focus()
+
+        # Focus table after refresh to ensure CSS is applied
+        self.call_after_refresh(table.focus)
+
+        # Apply fullscreen mode if configured
+        if self._fullscreen:
+            self.add_class("fullscreen")
 
         self.run_worker(self._connect_and_load())
 
@@ -434,6 +457,14 @@ class JetStreamApp(App[JetStreamConfig | None]):
         table = self.query_one(DataTable)
         if self.filtered_streams:
             table.move_cursor(row=len(self.filtered_streams) - 1)
+
+    def action_toggle_fullscreen(self) -> None:
+        """Toggle fullscreen mode (hide header/footer)."""
+        self._fullscreen = not self._fullscreen
+        if self._fullscreen:
+            self.add_class("fullscreen")
+        else:
+            self.remove_class("fullscreen")
 
     def action_start_filter(self) -> None:
         """Show the filter input."""

@@ -35,14 +35,23 @@ class HideConfig:
 
 
 @dataclass
+class AppearanceConfig:
+    """Appearance settings."""
+
+    theme: str = "textual-dark"  # Textual app theme
+    preview_theme: str = "monokai"  # Pygments theme for JSON syntax highlighting
+    fullscreen: bool = False  # Start in fullscreen mode (hide header/footer)
+
+
+@dataclass
 class Config:
     """Application configuration."""
 
-    theme: str = "monokai"
     export_path: str | None = None  # Default export file path
     connection: ConnectionConfig = field(default_factory=ConnectionConfig)
     columns: ColumnsConfig = field(default_factory=ColumnsConfig)
     hide: HideConfig = field(default_factory=HideConfig)
+    appearance: AppearanceConfig = field(default_factory=AppearanceConfig)
 
 
 def load_config() -> Config:
@@ -80,10 +89,17 @@ def load_config() -> Config:
         jetstream=hide_data.get("jetstream", False),
     )
 
+    appearance_data = data.get("appearance", {})
+    appearance = AppearanceConfig(
+        theme=appearance_data.get("theme", "textual-dark"),
+        preview_theme=appearance_data.get("preview_theme", "monokai"),
+        fullscreen=appearance_data.get("fullscreen", False),
+    )
+
     return Config(
-        theme=data.get("theme", "monokai"),
         export_path=data.get("export_path"),
         connection=connection,
         columns=columns,
         hide=hide,
+        appearance=appearance,
     )

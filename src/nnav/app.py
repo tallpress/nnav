@@ -128,6 +128,7 @@ class HelpScreen(ModalScreen[None]):
 
             yield Label("Views & Panels", classes="help-section")
             yield Label("  T          Subject tree browser", classes="help-row")
+            yield Label("  F          Toggle fullscreen", classes="help-row")
             yield Label("  i          Show connection info", classes="help-row")
             yield Label("  ?          Show this help", classes="help-row")
             yield Label("  q          Quit", classes="help-row")
@@ -246,10 +247,11 @@ class MessageDetailScreen(ModalScreen[int | None]):
     }
     """
 
-    def __init__(self, stored: StoredMessage) -> None:
+    def __init__(self, stored: StoredMessage, preview_theme: str = "monokai") -> None:
         super().__init__()
         self.stored = stored
         self.msg = stored.msg
+        self.preview_theme = preview_theme
         self._parsed_json: dict[str, object] | list[object] | None = None
         self._is_json = False
         self._current_path: str | None = None  # Track if showing a path query result
@@ -334,7 +336,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
             self._parsed_json = json.loads(payload)
             self._is_json = True
             formatted = json.dumps(self._parsed_json, indent=2)
-            syntax = Syntax(formatted, "json", theme=self.app.theme, line_numbers=False)
+            syntax = Syntax(formatted, "json", theme=self.preview_theme, line_numbers=False)
             widget.update(syntax)
         except json.JSONDecodeError:
             self._parsed_json = None
@@ -491,7 +493,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
             if isinstance(result, (dict, list)):
                 formatted = json.dumps(result, indent=2)
                 syntax = Syntax(
-                    formatted, "json", theme=self.app.theme, line_numbers=False
+                    formatted, "json", theme=self.preview_theme, line_numbers=False
                 )
                 payload_widget.update(syntax)
             elif isinstance(result, str):
@@ -620,10 +622,11 @@ class DiffScreen(ModalScreen[None]):
     }
     """
 
-    def __init__(self, msg1: NatsMessage, msg2: NatsMessage) -> None:
+    def __init__(self, msg1: NatsMessage, msg2: NatsMessage, preview_theme: str = "monokai") -> None:
         super().__init__()
         self.msg1 = msg1
         self.msg2 = msg2
+        self.preview_theme = preview_theme
 
     def compose(self) -> ComposeResult:
         with Container(id="diff-dialog"):
@@ -664,7 +667,7 @@ class DiffScreen(ModalScreen[None]):
         try:
             parsed = json.loads(payload)
             formatted = json.dumps(parsed, indent=2)
-            syntax = Syntax(formatted, "json", theme=self.app.theme, line_numbers=False)
+            syntax = Syntax(formatted, "json", theme=self.preview_theme, line_numbers=False)
             widget.update(syntax)
         except json.JSONDecodeError:
             widget.update(payload)
@@ -1011,6 +1014,8 @@ class SubjectTreeScreen(ModalScreen[str | None]):
     BINDINGS = [
         Binding("escape", "dismiss_none", "Close"),
         Binding("q", "dismiss_none", "Close"),
+        Binding("h", "toggle_histogram", "Histogram"),
+        Binding("s", "toggle_sort", "Sort", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
     ]
@@ -1039,6 +1044,20 @@ class SubjectTreeScreen(ModalScreen[str | None]):
         border: solid $primary-darken-2;
     }
 
+    #subject-tree.hidden {
+        display: none;
+    }
+
+    #histogram-table {
+        height: 1fr;
+        border: solid $primary-darken-2;
+        display: none;
+    }
+
+    #histogram-table.visible {
+        display: block;
+    }
+
     #tree-hint {
         text-align: center;
         color: $text-muted;
@@ -1049,12 +1068,16 @@ class SubjectTreeScreen(ModalScreen[str | None]):
     def __init__(self, root: SubjectNode) -> None:
         super().__init__()
         self.root = root
+        self.histogram_mode = False
+        self.sort_by_count = True
+        self._flat_subjects: list[tuple[str, int]] = []
 
     def compose(self) -> ComposeResult:
         with Container(id="tree-dialog"):
             yield Label("Subject Tree", id="tree-title")
             yield Tree("Subjects", id="subject-tree")
-            yield Label("Enter: filter to subject | q: close", id="tree-hint")
+            yield DataTable(id="histogram-table")
+            yield Label("Enter: filter | h: histogram | q: close", id="tree-hint")
 
     def on_mount(self) -> None:
         """Build the tree from subject nodes."""
@@ -1067,6 +1090,14 @@ class SubjectTreeScreen(ModalScreen[str | None]):
         # Expand first level
         for child in tree.root.children:
             child.expand()
+
+        # Build flat subjects for histogram
+        self._flat_subjects = self._build_flat_subjects()
+
+        # Set up histogram table
+        table = self.query_one("#histogram-table", DataTable)
+        table.add_columns("Subject", "Distribution", "Count")
+        table.cursor_type = "row"
 
     def _populate_tree(
         self, tree_node: TreeNode[str], subject_node: SubjectNode
@@ -1105,13 +1136,87 @@ class SubjectTreeScreen(ModalScreen[str | None]):
 
     def action_cursor_down(self) -> None:
         """Move cursor down."""
-        tree = self.query_one("#subject-tree", Tree)
-        tree.action_cursor_down()
+        if self.histogram_mode:
+            self.query_one("#histogram-table", DataTable).action_cursor_down()
+        else:
+            self.query_one("#subject-tree", Tree).action_cursor_down()
 
     def action_cursor_up(self) -> None:
         """Move cursor up."""
+        if self.histogram_mode:
+            self.query_one("#histogram-table", DataTable).action_cursor_up()
+        else:
+            self.query_one("#subject-tree", Tree).action_cursor_up()
+
+    def _build_flat_subjects(self) -> list[tuple[str, int]]:
+        """Flatten tree to list of (subject, count) tuples."""
+        results: list[tuple[str, int]] = []
+
+        def walk(node: SubjectNode) -> None:
+            if node.count > 0:
+                results.append((node.full_subject, node.count))
+            for child in node.children.values():
+                walk(child)
+
+        walk(self.root)
+        return results
+
+    def _populate_histogram(self) -> None:
+        """Populate the histogram table."""
+        table = self.query_one("#histogram-table", DataTable)
+        table.clear()
+
+        subjects = self._flat_subjects
+        if self.sort_by_count:
+            subjects = sorted(subjects, key=lambda x: -x[1])
+        else:
+            subjects = sorted(subjects, key=lambda x: x[0])
+
+        if not subjects:
+            return
+
+        max_count = max(c for _, c in subjects)
+        bar_width = 25
+
+        for subject, count in subjects:
+            bar_len = int((count / max_count) * bar_width) if max_count > 0 else 0
+            bar = "█" * bar_len + "░" * (bar_width - bar_len)
+            table.add_row(subject, bar, str(count), key=subject)
+
+    def action_toggle_histogram(self) -> None:
+        """Toggle between tree and histogram view."""
+        self.histogram_mode = not self.histogram_mode
         tree = self.query_one("#subject-tree", Tree)
-        tree.action_cursor_up()
+        table = self.query_one("#histogram-table", DataTable)
+        title = self.query_one("#tree-title", Label)
+        hint = self.query_one("#tree-hint", Label)
+
+        if self.histogram_mode:
+            tree.add_class("hidden")
+            table.add_class("visible")
+            self._populate_histogram()
+            table.focus()
+            title.update("Subject Histogram")
+            hint.update("Enter: filter | h: tree view | s: sort | q: close")
+        else:
+            tree.remove_class("hidden")
+            table.remove_class("visible")
+            tree.focus()
+            title.update("Subject Tree")
+            hint.update("Enter: filter | h: histogram | q: close")
+
+    def action_toggle_sort(self) -> None:
+        """Toggle sort order in histogram mode."""
+        if self.histogram_mode:
+            self.sort_by_count = not self.sort_by_count
+            self._populate_histogram()
+            sort_type = "count" if self.sort_by_count else "name"
+            self.notify(f"Sorted by {sort_type}")
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Handle histogram row selection."""
+        if event.row_key and event.row_key.value:
+            self.dismiss(str(event.row_key.value))
 
 
 class FilterInput(Input):
@@ -1163,6 +1268,18 @@ class NatsVisApp(App[None]):
     .bookmarked {
         color: $warning;
     }
+
+    .fullscreen Header {
+        display: none;
+    }
+
+    .fullscreen Footer {
+        display: none;
+    }
+
+    .fullscreen #status-bar {
+        display: none;
+    }
     """
 
     BINDINGS = [
@@ -1173,13 +1290,14 @@ class NatsVisApp(App[None]):
         Binding("slash", "start_filter", "Filter"),
         Binding("escape", "clear_filter", "Clear Filter", show=False),
         Binding("t", "filter_type", "Type Filter"),
+        Binding("F", "toggle_fullscreen", "Fullscreen"),
         Binding("i", "connection_info", "Info"),
         Binding("r", "republish", "Republish", show=False),
         Binding("e", "export", "Export"),
         Binding("E", "export_filtered", "Export Filtered", show=False),
-        Binding("m", "toggle_bookmark", "Bookmark", show=False),
-        Binding("n", "next_bookmark", "Next Bookmark", show=False),
-        Binding("N", "prev_bookmark", "Prev Bookmark", show=False),
+        Binding("m", "toggle_bookmark", "Mark"),
+        Binding("n", "next_bookmark", "Next Mark"),
+        Binding("N", "prev_bookmark", "Prev Mark", show=False),
         Binding("d", "diff_bookmarks", "Diff", show=False),
         Binding("y", "copy_payload", "Copy", show=False),
         Binding("Y", "copy_subject", "Copy Subject", show=False),
@@ -1197,14 +1315,18 @@ class NatsVisApp(App[None]):
         password: str | None = None,
         subject: str = ">",
         import_file: Path | None = None,
-        theme: str = "monokai",
+        preview_theme: str = "monokai",
+        textual_theme: str = "textual-dark",
+        fullscreen: bool = False,
         hide: HideConfig | None = None,
         columns: ColumnsConfig | None = None,
         export_path: str | None = None,
         jetstream_config: JetStreamConfig | None = None,
     ) -> None:
         super().__init__()
-        self.theme = theme
+        self.theme = textual_theme
+        self.preview_theme = preview_theme
+        self._fullscreen = fullscreen
         self.hide = hide or HideConfig()
         self.columns = columns or ColumnsConfig()
         self.export_path = export_path
@@ -1256,6 +1378,13 @@ class NatsVisApp(App[None]):
             cols.append("Payload")
         table.add_columns(*cols)
         table.cursor_type = "row"
+
+        # Focus table after refresh to ensure CSS is applied
+        self.call_after_refresh(table.focus)
+
+        # Apply fullscreen mode if configured
+        if self._fullscreen:
+            self.add_class("fullscreen")
 
         if self.viewer_mode and self.import_file:
             # Load imported messages
@@ -1654,7 +1783,7 @@ class NatsVisApp(App[None]):
                 related_stored = self.messages[result]
                 self._show_message_detail(related_stored)
 
-        self.push_screen(MessageDetailScreen(stored), handle_result)
+        self.push_screen(MessageDetailScreen(stored, self.preview_theme), handle_result)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle filter input submission."""
@@ -1757,6 +1886,14 @@ class NatsVisApp(App[None]):
     def action_help(self) -> None:
         """Show help screen."""
         self.push_screen(HelpScreen())
+
+    def action_toggle_fullscreen(self) -> None:
+        """Toggle fullscreen mode (hide header/footer)."""
+        self._fullscreen = not self._fullscreen
+        if self._fullscreen:
+            self.add_class("fullscreen")
+        else:
+            self.remove_class("fullscreen")
 
     def action_clear(self) -> None:
         """Clear all messages (requires double-press)."""
@@ -1944,7 +2081,7 @@ class NatsVisApp(App[None]):
             return
 
         # Use first two bookmarks
-        self.push_screen(DiffScreen(bookmarked[0].msg, bookmarked[1].msg))
+        self.push_screen(DiffScreen(bookmarked[0].msg, bookmarked[1].msg, self.preview_theme))
 
     def action_copy_payload(self) -> None:
         """Copy selected message payload to clipboard."""

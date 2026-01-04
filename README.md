@@ -95,6 +95,7 @@ nnav --import session.json
 | `d` | Diff two bookmarked messages |
 | `y` | Copy payload |
 | `e` | Export messages |
+| `F` | Toggle fullscreen |
 | `?` | Help |
 | `q` | Quit |
 
@@ -129,6 +130,7 @@ nnav -J -c ~/.config/nats/context/prod.json
 | `Enter` | Select stream (choose start position) |
 | `c` | View consumers for stream |
 | `r` | Refresh stream list |
+| `F` | Toggle fullscreen |
 | `q` | Quit |
 
 #### Start Positions
@@ -166,11 +168,14 @@ nnav -i session.json -e output.ndjson --format ndjson
 nnav supports a configuration file at `~/.config/nnav/config.toml`:
 
 ```toml
-# Syntax highlighting theme (any Pygments theme)
-theme = "monokai"
-
 # Default export file path
 export_path = "~/nats-exports/session.json"
+
+# Appearance settings
+[appearance]
+theme = "textual-dark"         # Textual app theme
+preview_theme = "monokai"      # Pygments theme for JSON syntax highlighting
+fullscreen = false             # Start in fullscreen mode (hide header/footer)
 
 # Default connection (used when no --server or --context provided)
 [connection]
@@ -195,7 +200,15 @@ payload = true     # Message payload preview
 
 All settings are optional - defaults are used for missing values.
 
-### Available Themes
+### theme
+
+See [Textual themes](https://textual.textualize.io/guide/design/#themes) for all available options.
+
+Common: `textual-dark`, `textual-light`, `nord`, `dracula`, `gruvbox`, `tokyo-night`, `monokai`, `catppuccin-mocha`
+
+### preview_theme
+
+See [Pygments styles](https://pygments.org/styles/) for all available options.
 
 Dark: `monokai`, `dracula`, `one-dark`, `nord`, `gruvbox-dark`, `material`, `native`, `vim`
 
