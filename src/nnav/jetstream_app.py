@@ -21,9 +21,9 @@ from textual.widgets import (
 )
 from textual.widgets.option_list import Option
 
-from nnav.config import ColumnsConfig, HideConfig
+from nnav.config import ColumnsConfig, HideConfig, ThemeConfig
 from nnav.nats_client import JetStreamConfig, JetStreamDeliverPolicy
-from nnav.themes import CUSTOM_THEMES
+from nnav.themes import build_themes
 from nnav.ui import FilterInput, FullscreenMixin
 from nnav.utils.formatting import format_bytes
 
@@ -298,10 +298,11 @@ class JetStreamApp(FullscreenMixin, App[JetStreamConfig | None]):
         hide: HideConfig | None = None,
         columns: ColumnsConfig | None = None,
         export_path: str | None = None,
+        theme_configs: list[ThemeConfig] | None = None,
     ) -> None:
         super().__init__()
-        # Register custom themes before setting theme
-        for custom_theme in CUSTOM_THEMES:
+        # Register custom themes from config before setting theme
+        for custom_theme in build_themes(theme_configs or []):
             self.register_theme(custom_theme)
         self.server_url = server_url
         self.user = user
