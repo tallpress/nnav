@@ -5,8 +5,7 @@ from __future__ import annotations
 import nats
 from nats.aio.client import Client
 from nats.js import JetStreamContext
-from nats.js.api import StreamInfo, ConsumerInfo
-
+from nats.js.api import ConsumerInfo, StreamInfo
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Vertical
@@ -24,16 +23,9 @@ from textual.widgets.option_list import Option
 
 from nnav.config import ColumnsConfig, HideConfig
 from nnav.nats_client import JetStreamConfig, JetStreamDeliverPolicy
-
-
-def format_bytes(num_bytes: int) -> str:
-    """Format bytes to human readable string."""
-    size = float(num_bytes)
-    for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size < 1024:
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} PB"
+from nnav.themes import CUSTOM_THEMES
+from nnav.ui import FilterInput, FullscreenMixin
+from nnav.utils.formatting import format_bytes
 
 
 class StartPositionScreen(ModalScreen[JetStreamConfig | None]):
@@ -248,22 +240,7 @@ class ConsumerListScreen(ModalScreen[None]):
         self.query_one(DataTable).action_cursor_up()
 
 
-class FilterInput(Input):
-    """Input widget for filtering streams."""
-
-    CSS = """
-    FilterInput {
-        dock: top;
-        display: none;
-    }
-
-    FilterInput.visible {
-        display: block;
-    }
-    """
-
-
-class JetStreamApp(App[JetStreamConfig | None]):
+class JetStreamApp(FullscreenMixin, App[JetStreamConfig | None]):
     """JetStream browser for viewing streams and consumers."""
 
     TITLE = "JetStream Browser"
@@ -323,6 +300,9 @@ class JetStreamApp(App[JetStreamConfig | None]):
         export_path: str | None = None,
     ) -> None:
         super().__init__()
+        # Register custom themes before setting theme
+        for custom_theme in CUSTOM_THEMES:
+            self.register_theme(custom_theme)
         self.server_url = server_url
         self.user = user
         self.password = password
@@ -457,14 +437,6 @@ class JetStreamApp(App[JetStreamConfig | None]):
         table = self.query_one(DataTable)
         if self.filtered_streams:
             table.move_cursor(row=len(self.filtered_streams) - 1)
-
-    def action_toggle_fullscreen(self) -> None:
-        """Toggle fullscreen mode (hide header/footer)."""
-        self._fullscreen = not self._fullscreen
-        if self._fullscreen:
-            self.add_class("fullscreen")
-        else:
-            self.remove_class("fullscreen")
 
     def action_start_filter(self) -> None:
         """Show the filter input."""
