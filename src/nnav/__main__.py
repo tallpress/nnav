@@ -118,6 +118,7 @@ def main(
     # Headless mode: import + export
     if import_file and export_file:
         from nnav.headless import run_headless
+
         run_headless(
             import_file=import_file,
             export_file=export_file,
