@@ -24,7 +24,7 @@ from textual.widgets.option_list import Option
 from nnav.config import ColumnsConfig, HideConfig, ThemeConfig
 from nnav.nats_client import JetStreamConfig, JetStreamDeliverPolicy
 from nnav.themes import build_themes
-from nnav.ui import FilterInput, FullscreenMixin
+from nnav.ui import FilterInput, FilterMixin, FullscreenMixin
 from nnav.utils.formatting import format_bytes
 
 
@@ -240,7 +240,7 @@ class ConsumerListScreen(ModalScreen[None]):
         self.query_one(DataTable).action_cursor_up()
 
 
-class JetStreamApp(FullscreenMixin, App[JetStreamConfig | None]):
+class JetStreamApp(FilterMixin, FullscreenMixin, App[JetStreamConfig | None]):
     """JetStream browser for viewing streams and consumers."""
 
     TITLE = "JetStream Browser"
@@ -321,9 +321,9 @@ class JetStreamApp(FullscreenMixin, App[JetStreamConfig | None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield FilterInput(placeholder="Filter streams...", id="filter")
         with Container(id="main-container"):
             yield DataTable()
+        yield FilterInput(placeholder="Filter streams...", id="filter")
         yield Static("", id="status-bar")
         yield Footer()
 
@@ -439,34 +439,26 @@ class JetStreamApp(FullscreenMixin, App[JetStreamConfig | None]):
         if self.filtered_streams:
             table.move_cursor(row=len(self.filtered_streams) - 1)
 
-    def action_start_filter(self) -> None:
-        """Show the filter input."""
-        filter_input = self.query_one("#filter", FilterInput)
-        filter_input.add_class("visible")
-        filter_input.value = self.filter_text
-        filter_input.focus()
-
     def action_clear_filter(self) -> None:
-        """Clear the filter."""
-        filter_input = self.query_one("#filter", FilterInput)
-        if filter_input.has_class("visible"):
-            filter_input.remove_class("visible")
-            filter_input.value = ""
-            self.query_one(DataTable).focus()
-            return
+        """Clear the filter and hide input."""
+        self._hide_filter_input()
 
+        # Clear filter state
         if self.filter_text:
             self.filter_text = ""
             self._apply_filter()
             self.notify("Filter cleared")
+
+        self._focus_table()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle filter input submission."""
         if event.input.id == "filter":
             self.filter_text = event.value.strip()
             self._apply_filter()
-            event.input.remove_class("visible")
-            self.query_one(DataTable).focus()
+            if not event.value.strip():  # Only hide if filter is empty
+                event.input.remove_class("visible")
+            self._focus_table()
 
     def _apply_filter(self) -> None:
         """Apply filter to the streams table."""

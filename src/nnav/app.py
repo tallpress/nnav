@@ -24,6 +24,7 @@ from nnav.ui import (
     DiffScreen,
     ExportScreen,
     FilterInput,
+    FilterMixin,
     FullscreenMixin,
     HelpScreen,
     MessageDetailScreen,
@@ -34,7 +35,7 @@ from nnav.ui import (
 )
 from nnav.utils.clipboard import copy_to_clipboard
 
-class NatsVisApp(FullscreenMixin, App[None]):
+class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
     TITLE = "nnav"
 
     CSS = """
@@ -156,9 +157,9 @@ class NatsVisApp(FullscreenMixin, App[None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield FilterInput(placeholder="Filter (text or /regex/)...", id="filter")
         with Container(id="main-container"):
             yield DataTable()
+        yield FilterInput(placeholder="Filter (text or /regex/)...", id="filter")
         yield Static("", id="status-bar")
         yield Footer()
 
@@ -449,8 +450,9 @@ class NatsVisApp(FullscreenMixin, App[None]):
                 self.filter_regex = None
 
             self._apply_filter()
-            event.input.remove_class("visible")
-            self.query_one(DataTable).focus()
+            if not event.value:  # Only hide if filter is empty
+                event.input.remove_class("visible")
+            self._focus_table()
 
     def _apply_filter(self) -> None:
         """Apply the current filter to messages."""
@@ -562,28 +564,19 @@ class NatsVisApp(FullscreenMixin, App[None]):
         else:
             self.notify("Resumed")
 
-    def action_start_filter(self) -> None:
-        """Start filtering."""
-        filter_input = self.query_one("#filter", FilterInput)
-        filter_input.add_class("visible")
-        filter_input.value = self.filter_text
-        filter_input.focus()
-
     def action_clear_filter(self) -> None:
-        """Clear the filter."""
-        filter_input = self.query_one("#filter", FilterInput)
-        if filter_input.has_class("visible"):
-            filter_input.remove_class("visible")
-            filter_input.value = ""
-            self.query_one(DataTable).focus()
-            return
+        """Clear the filter and hide input."""
+        self._hide_filter_input()
 
+        # Clear filter state
         if self.filter_text or self.filter_type:
             self.filter_text = ""
             self.filter_regex = None
             self.filter_type = None
             self._apply_filter()
             self.notify("Filters cleared")
+
+        self._focus_table()
 
     def action_filter_type(self) -> None:
         """Cycle through message type filters."""

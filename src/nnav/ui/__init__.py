@@ -1,6 +1,11 @@
 """Shared UI components for nnav."""
 
-from nnav.ui.mixins import CURSOR_BINDINGS, FULLSCREEN_BINDING, FullscreenMixin
+from nnav.ui.mixins import (
+    CURSOR_BINDINGS,
+    FULLSCREEN_BINDING,
+    FilterMixin,
+    FullscreenMixin,
+)
 from nnav.ui.screens import (
     ConnectionInfoScreen,
     DiffScreen,
@@ -29,6 +34,7 @@ __all__ = [
     "FULLSCREEN_BINDING",
     "FULLSCREEN_CSS",
     "FilterInput",
+    "FilterMixin",
     "FullscreenMixin",
     "HelpScreen",
     "MAIN_CONTAINER_CSS",
