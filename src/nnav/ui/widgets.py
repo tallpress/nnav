@@ -9,9 +9,9 @@ class FilterInput(Input):
     Hidden by default, shown when the 'visible' class is added.
     """
 
-    CSS = """
+    DEFAULT_CSS = """
     FilterInput {
-        dock: top;
+        dock: bottom;
         display: none;
     }
 
