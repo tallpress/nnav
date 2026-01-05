@@ -12,9 +12,9 @@ from textual.containers import Container
 from textual.widgets import DataTable, Footer, Header, Input, Static
 from textual.widgets.data_table import RowKey
 
-from nnav.config import ColumnsConfig, HideConfig
+from nnav.config import ColumnsConfig, HideConfig, ThemeConfig
 from nnav.messages import load_messages
-from nnav.themes import CUSTOM_THEMES
+from nnav.themes import build_themes
 from nnav.nats_client import JetStreamConfig, MessageType, NatsMessage, NatsSubscriber
 from nnav.ui import (
     CURSOR_BINDINGS,
@@ -120,10 +120,11 @@ class NatsVisApp(FullscreenMixin, App[None]):
         columns: ColumnsConfig | None = None,
         export_path: str | None = None,
         jetstream_config: JetStreamConfig | None = None,
+        theme_configs: list[ThemeConfig] | None = None,
     ) -> None:
         super().__init__()
-        # Register custom themes before setting theme
-        for custom_theme in CUSTOM_THEMES:
+        # Register custom themes from config before setting theme
+        for custom_theme in build_themes(theme_configs or []):
             self.register_theme(custom_theme)
         self.theme = textual_theme
         self.preview_theme = preview_theme

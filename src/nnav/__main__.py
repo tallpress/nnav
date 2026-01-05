@@ -165,6 +165,7 @@ def main(
             hide=config.hide,
             columns=config.columns,
             export_path=config.export_path,
+            theme_configs=config.themes,
         )
         js_config = js_app.run()
 
@@ -181,6 +182,7 @@ def main(
                 columns=config.columns,
                 export_path=config.export_path,
                 jetstream_config=js_config,
+                theme_configs=config.themes,
             )
             watch_app.run()
         return
@@ -196,6 +198,7 @@ def main(
             hide=config.hide,
             columns=config.columns,
             export_path=config.export_path,
+            theme_configs=config.themes,
         )
     elif context:
         ctx = load_context(context)
@@ -210,6 +213,7 @@ def main(
             hide=config.hide,
             columns=config.columns,
             export_path=config.export_path,
+            theme_configs=config.themes,
         )
     elif server:
         # CLI --server flag
@@ -222,6 +226,7 @@ def main(
             hide=config.hide,
             columns=config.columns,
             export_path=config.export_path,
+            theme_configs=config.themes,
         )
     elif config.connection.url:
         # Config file connection
@@ -236,6 +241,7 @@ def main(
             hide=config.hide,
             columns=config.columns,
             export_path=config.export_path,
+            theme_configs=config.themes,
         )
     else:
         # Default localhost
@@ -248,6 +254,7 @@ def main(
             hide=config.hide,
             columns=config.columns,
             export_path=config.export_path,
+            theme_configs=config.themes,
         )
     app.run()
 

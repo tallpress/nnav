@@ -44,6 +44,25 @@ class AppearanceConfig:
 
 
 @dataclass
+class ThemeConfig:
+    """Custom theme definition."""
+
+    name: str
+    primary: str = "#0178d4"
+    secondary: str = "#004578"
+    accent: str = "#ffa62b"
+    foreground: str = "#e0e0e0"
+    background: str = "#121212"
+    success: str = "#4caf50"
+    warning: str = "#ffa726"
+    error: str = "#ba1a1a"
+    surface: str = "#1e1e1e"
+    panel: str = "#2d2d2d"
+    dark: bool = True
+    variables: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class Config:
     """Application configuration."""
 
@@ -52,6 +71,7 @@ class Config:
     columns: ColumnsConfig = field(default_factory=ColumnsConfig)
     hide: HideConfig = field(default_factory=HideConfig)
     appearance: AppearanceConfig = field(default_factory=AppearanceConfig)
+    themes: list[ThemeConfig] = field(default_factory=list)
 
 
 def load_config() -> Config:
@@ -96,10 +116,32 @@ def load_config() -> Config:
         fullscreen=appearance_data.get("fullscreen", False),
     )
 
+    themes_data = data.get("themes", [])
+    themes = [
+        ThemeConfig(
+            name=t["name"],
+            primary=t.get("primary", "#0178d4"),
+            secondary=t.get("secondary", "#004578"),
+            accent=t.get("accent", "#ffa62b"),
+            foreground=t.get("foreground", "#e0e0e0"),
+            background=t.get("background", "#121212"),
+            success=t.get("success", "#4caf50"),
+            warning=t.get("warning", "#ffa726"),
+            error=t.get("error", "#ba1a1a"),
+            surface=t.get("surface", "#1e1e1e"),
+            panel=t.get("panel", "#2d2d2d"),
+            dark=t.get("dark", True),
+            variables=t.get("variables", {}),
+        )
+        for t in themes_data
+        if "name" in t
+    ]
+
     return Config(
         export_path=data.get("export_path"),
         connection=connection,
         columns=columns,
         hide=hide,
         appearance=appearance,
+        themes=themes,
     )
