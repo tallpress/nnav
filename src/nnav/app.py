@@ -99,7 +99,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         Binding("N", "prev_bookmark", "Prev Mark", show=False),
         Binding("d", "diff_bookmarks", "Diff", show=False),
         Binding("y", "copy_payload", "Copy", show=False),
-        Binding("Y", "copy_subject", "Copy Subject", show=False),
+        Binding("Y", "copy_message", "Copy Message", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("g", "cursor_top", "Top", show=False),
@@ -729,12 +729,35 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             else:
                 self.notify("Clipboard not available", severity="warning")
 
-    def action_copy_subject(self) -> None:
-        """Copy selected message subject to clipboard."""
-        msg = self._get_selected_message()
-        if msg:
-            if copy_to_clipboard(msg.subject):
-                self.notify("Subject copied")
+    def _message_to_dict(self, msg: NatsMessage) -> dict[str, object]:
+        """Convert a message to a dictionary for JSON serialization."""
+        try:
+            payload = json.loads(msg.payload)
+        except json.JSONDecodeError:
+            payload = msg.payload
+
+        data: dict[str, object] = {"subject": msg.subject}
+        if msg.reply_to:
+            data["reply_to"] = msg.reply_to
+        if msg.headers:
+            data["headers"] = msg.headers
+        data["payload"] = payload
+        return data
+
+    def action_copy_message(self) -> None:
+        """Copy full message as JSON to clipboard."""
+        stored = self._get_selected_stored()
+        if stored:
+            data = self._message_to_dict(stored.msg)
+
+            # Include related request/response if available
+            if stored.related_index is not None and 0 <= stored.related_index < len(self.messages):
+                related = self.messages[stored.related_index].msg
+                key = "response" if stored.msg.message_type == MessageType.REQUEST else "request"
+                data[key] = self._message_to_dict(related)
+
+            if copy_to_clipboard(json.dumps(data, indent=2)):
+                self.notify("Message copied")
             else:
                 self.notify("Clipboard not available", severity="warning")
 
