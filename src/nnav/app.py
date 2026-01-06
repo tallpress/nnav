@@ -41,10 +41,20 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
     CSS = """
     #main-container {
         height: 1fr;
+        background: $background;
     }
 
     DataTable {
         height: 1fr;
+        background: $background;
+    }
+
+    DataTable:focus {
+        background: $background;
+    }
+
+    DataTable:focus-within {
+        background: $background;
     }
 
     DataTable > .datatable--cursor {
