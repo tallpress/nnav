@@ -783,15 +783,9 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             data = self._message_to_dict(stored.msg)
 
             # Include related request/response if available
-            if stored.related_index is not None and 0 <= stored.related_index < len(
-                self.messages
-            ):
+            if stored.related_index is not None and 0 <= stored.related_index < len(self.messages):
                 related = self.messages[stored.related_index].msg
-                key = (
-                    "response"
-                    if stored.msg.message_type == MessageType.REQUEST
-                    else "request"
-                )
+                key = "response" if stored.msg.message_type == MessageType.REQUEST else "request"
                 data[key] = self._message_to_dict(related)
 
             if copy_to_clipboard(json.dumps(data, indent=2)):
