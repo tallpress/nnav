@@ -994,6 +994,8 @@ class SubjectTreeScreen(ModalScreen[str | None]):
         Binding("s", "toggle_sort", "Sort", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
+        Binding("down", "cursor_down", "Down", show=False),
+        Binding("up", "cursor_up", "Up", show=False),
     ]
 
     CSS = """
