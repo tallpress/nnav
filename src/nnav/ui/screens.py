@@ -257,11 +257,17 @@ class MessageDetailScreen(ModalScreen[int | None]):
     }
     """
 
-    def __init__(self, stored: StoredMessage, preview_theme: str = "monokai") -> None:
+    def __init__(
+        self,
+        stored: StoredMessage,
+        preview_theme: str = "monokai",
+        fullscreen: bool = False,
+    ) -> None:
         super().__init__()
         self.stored = stored
         self.msg = stored.msg
         self.preview_theme = preview_theme
+        self.fullscreen = fullscreen
         self._parsed_json: dict[str, object] | list[object] | None = None
         self._is_json = False
         self._current_path: str | None = None
@@ -286,7 +292,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
                         f"Reply-To: {self.msg.reply_to}",
                         classes="meta-row meta-request",
                     )
-                    if self.stored.related_index is not None:
+                    if self.stored.related_index is not None and not self.fullscreen:
                         yield Label(
                             "  → Press 'r' to view response",
                             classes="meta-row meta-latency",
@@ -296,7 +302,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
                         f"Request Subject: {self.msg.request_subject}",
                         classes="meta-row",
                     )
-                    if self.stored.related_index is not None:
+                    if self.stored.related_index is not None and not self.fullscreen:
                         yield Label(
                             "  → Press 'r' to view original request",
                             classes="meta-row meta-latency",
@@ -327,13 +333,14 @@ class MessageDetailScreen(ModalScreen[int | None]):
                         id="json-path-input",
                     )
 
-                hint_parts = ["q: close", "y: copy", "/: query", "jk: scroll"]
-                if self.stored.related_index is not None:
-                    if self.msg.message_type == MessageType.REQUEST:
-                        hint_parts.append("r: response")
-                    elif self.msg.message_type == MessageType.RESPONSE:
-                        hint_parts.append("r: request")
-                yield Label(" | ".join(hint_parts), id="hint")
+                if not self.fullscreen:
+                    hint_parts = ["q: close", "y: copy", "/: query", "jk: scroll"]
+                    if self.stored.related_index is not None:
+                        if self.msg.message_type == MessageType.REQUEST:
+                            hint_parts.append("r: response")
+                        elif self.msg.message_type == MessageType.RESPONSE:
+                            hint_parts.append("r: request")
+                    yield Label(" | ".join(hint_parts), id="hint")
 
     def on_mount(self) -> None:
         """Format and display the payload with syntax highlighting."""

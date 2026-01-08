@@ -14,8 +14,8 @@ from textual.widgets.data_table import RowKey
 
 from nnav.config import ColumnsConfig, HideConfig, ThemeConfig
 from nnav.messages import load_messages
-from nnav.themes import build_themes
 from nnav.nats_client import JetStreamConfig, MessageType, NatsMessage, NatsSubscriber
+from nnav.themes import build_themes
 from nnav.ui import (
     CURSOR_BINDINGS,
     FULLSCREEN_BINDING,
@@ -34,6 +34,7 @@ from nnav.ui import (
     SubjectTreeScreen,
 )
 from nnav.utils.clipboard import copy_to_clipboard
+
 
 class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
     TITLE = "nnav"
@@ -96,6 +97,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         Binding("?", "help", "Help"),
         Binding("c", "clear", "Clear"),
         Binding("p", "toggle_pause", "Pause"),
+        Binding("f", "toggle_tail", "Tail"),
         Binding("slash", "start_filter", "Filter"),
         Binding("escape", "clear_filter", "Clear Filter", show=False),
         Binding("t", "filter_type", "Type Filter"),
@@ -154,6 +156,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
                 server_url, user=user, password=password, subject=subject
             )
         self.paused = False
+        self.tail_mode = True  # Auto-scroll to new messages
         self.filter_text = ""
         self.filter_type: MessageType | None = None
         self.filter_regex: re.Pattern[str] | None = None
@@ -224,6 +227,9 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
                 status.add_class("paused")
             else:
                 status.remove_class("paused")
+
+            if self.tail_mode:
+                parts.append("[TAIL]")
 
         if self.filter_text:
             parts.append(f"Filter: {self.filter_text}")
@@ -352,7 +358,8 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         stored.row_key = row_key
         self.filtered_indices.append(msg_index)
 
-        if not self.paused:
+        # Auto-scroll only if tail mode is on
+        if self.tail_mode:
             table.scroll_end()
 
     def _matches_filter(self, msg: NatsMessage) -> bool:
@@ -438,7 +445,12 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
                 related_stored = self.messages[result]
                 self._show_message_detail(related_stored)
 
-        self.push_screen(MessageDetailScreen(stored, self.preview_theme), handle_result)
+        self.push_screen(
+            MessageDetailScreen(
+                stored, self.preview_theme, fullscreen=self._fullscreen
+            ),
+            handle_result,
+        )
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle filter input submission."""
@@ -573,6 +585,16 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             self.notify("Paused - press p to resume")
         else:
             self.notify("Resumed")
+
+    def action_toggle_tail(self) -> None:
+        """Toggle tail mode (auto-scroll to new messages)."""
+        self.tail_mode = not self.tail_mode
+        self._update_status()
+        if self.tail_mode:
+            self.notify("Tail mode on - following new messages")
+            self.query_one(DataTable).scroll_end()
+        else:
+            self.notify("Tail mode off - scroll freely")
 
     def action_clear_filter(self) -> None:
         """Clear the filter and hide input."""
@@ -761,9 +783,15 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             data = self._message_to_dict(stored.msg)
 
             # Include related request/response if available
-            if stored.related_index is not None and 0 <= stored.related_index < len(self.messages):
+            if stored.related_index is not None and 0 <= stored.related_index < len(
+                self.messages
+            ):
                 related = self.messages[stored.related_index].msg
-                key = "response" if stored.msg.message_type == MessageType.REQUEST else "request"
+                key = (
+                    "response"
+                    if stored.msg.message_type == MessageType.REQUEST
+                    else "request"
+                )
                 data[key] = self._message_to_dict(related)
 
             if copy_to_clipboard(json.dumps(data, indent=2)):
