@@ -339,6 +339,8 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             return
         if self.hide.jetstream and msg.subject.startswith("$JS."):
             return
+        if self.hide.jetstream_ack and msg.reply_to and msg.reply_to.startswith("$JS.ACK."):
+            return
 
         # Check filters
         if not self._matches_filter(msg):

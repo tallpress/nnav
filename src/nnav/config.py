@@ -32,6 +32,7 @@ class HideConfig:
 
     inbox: bool = False  # _INBOX.*
     jetstream: bool = False  # $JS.*
+    jetstream_ack: bool = False  # reply_to starts with $JS.ACK.*
 
 
 @dataclass
@@ -107,6 +108,7 @@ def load_config() -> Config:
     hide = HideConfig(
         inbox=hide_data.get("inbox", False),
         jetstream=hide_data.get("jetstream", False),
+        jetstream_ack=hide_data.get("jetstream_ack", False),
     )
 
     appearance_data = data.get("appearance", {})
