@@ -116,8 +116,9 @@ class HelpScreen(ModalScreen[None]):
 
             yield Label("Filtering & Search", classes="help-section")
             yield Label(
-                "  /          Filter messages (text or /regex/)", classes="help-row"
+                "  /          Filter messages (text, /regex/, !exclude)", classes="help-row"
             )
+            yield Label("             !pattern excludes matching messages", classes="help-row")
             yield Label("  Escape     Clear filter", classes="help-row")
             yield Label(
                 "  t          Filter by message type (REQ/RES/PUB)", classes="help-row"

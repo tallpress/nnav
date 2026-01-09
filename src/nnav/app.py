@@ -159,7 +159,10 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self.tail_mode = True  # Auto-scroll to new messages
         self.filter_text = ""
         self.filter_type: MessageType | None = None
-        self.filter_regex: re.Pattern[str] | None = None
+        self.include_terms: list[str] = []
+        self.exclude_terms: list[str] = []
+        self.include_regexes: list[re.Pattern[str] | None] = []
+        self.exclude_regexes: list[re.Pattern[str] | None] = []
         self.messages: list[StoredMessage] = []
         self.filtered_indices: list[int] = []
         self.bookmark_indices: list[int] = []
@@ -231,8 +234,11 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             if self.tail_mode:
                 parts.append("[TAIL]")
 
-        if self.filter_text:
-            parts.append(f"Filter: {self.filter_text}")
+        if self.include_terms:
+            parts.append(f"Filter: {' '.join(self.include_terms)}")
+
+        if self.exclude_terms:
+            parts.append(f"Exclude: {' '.join(self.exclude_terms)}")
 
         if self.filter_type:
             parts.append(f"Type: {self.filter_type.value}")
@@ -368,27 +374,31 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         if self.filter_type and msg.message_type != self.filter_type:
             return False
 
-        # Text/regex filter
-        if self.filter_text:
-            if self.filter_regex:
-                if not (
-                    self.filter_regex.search(msg.subject)
-                    or self.filter_regex.search(msg.payload)
-                ):
-                    return False
-            elif ">" in self.filter_text or "*" in self.filter_text:
-                # NATS subject wildcard pattern
-                if not self._matches_subject_pattern(msg.subject, self.filter_text):
-                    return False
-            else:
-                filter_lower = self.filter_text.lower()
-                if (
-                    filter_lower not in msg.subject.lower()
-                    and filter_lower not in msg.payload.lower()
-                ):
-                    return False
+        # Include terms - message must match ALL include terms
+        for i, term in enumerate(self.include_terms):
+            regex = self.include_regexes[i] if i < len(self.include_regexes) else None
+            if not self._term_matches(term, msg, regex):
+                return False
+
+        # Exclude terms - message must NOT match ANY exclude term
+        for i, term in enumerate(self.exclude_terms):
+            regex = self.exclude_regexes[i] if i < len(self.exclude_regexes) else None
+            if self._term_matches(term, msg, regex):
+                return False
 
         return True
+
+    def _term_matches(
+        self, term: str, msg: NatsMessage, regex: re.Pattern[str] | None
+    ) -> bool:
+        """Check if a single term matches the message."""
+        if regex:
+            return bool(regex.search(msg.subject) or regex.search(msg.payload))
+        elif ">" in term or "*" in term:
+            return self._matches_subject_pattern(msg.subject, term)
+        else:
+            term_lower = term.lower()
+            return term_lower in msg.subject.lower() or term_lower in msg.payload.lower()
 
     def _matches_subject_pattern(self, subject: str, pattern: str) -> bool:
         """Check if subject matches NATS wildcard pattern."""
@@ -456,25 +466,70 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         """Handle filter input submission."""
         if event.input.id == "filter":
             self.filter_text = event.value
-
-            # Check if regex pattern (surrounded by /)
-            if (
-                event.value.startswith("/")
-                and event.value.endswith("/")
-                and len(event.value) > 2
-            ):
-                try:
-                    self.filter_regex = re.compile(event.value[1:-1], re.IGNORECASE)
-                except re.error:
-                    self.filter_regex = None
-                    self.notify("Invalid regex pattern", severity="error")
-            else:
-                self.filter_regex = None
-
+            self._parse_filter_terms(event.value)
             self._apply_filter()
             if not event.value:  # Only hide if filter is empty
                 event.input.remove_class("visible")
             self._focus_table()
+
+    def _parse_filter_terms(self, filter_text: str) -> None:
+        """Parse filter text into include and exclude terms with their regexes."""
+        self.include_terms = []
+        self.exclude_terms = []
+        self.include_regexes = []
+        self.exclude_regexes = []
+
+        if not filter_text.strip():
+            return
+
+        # Split on spaces, but respect /regex/ boundaries
+        terms = self._split_filter_terms(filter_text)
+
+        for term in terms:
+            if term.startswith("!"):
+                pattern = term[1:]  # Remove ! prefix
+                if pattern:  # Ignore lone !
+                    self.exclude_terms.append(pattern)
+                    self.exclude_regexes.append(self._compile_regex_term(pattern))
+            else:
+                if term:
+                    self.include_terms.append(term)
+                    self.include_regexes.append(self._compile_regex_term(term))
+
+    def _split_filter_terms(self, filter_text: str) -> list[str]:
+        """Split filter text on spaces, respecting /regex/ boundaries."""
+        terms: list[str] = []
+        current = ""
+        in_regex = False
+
+        for char in filter_text:
+            if char == "/" and not in_regex:
+                in_regex = True
+                current += char
+            elif char == "/" and in_regex:
+                in_regex = False
+                current += char
+            elif char == " " and not in_regex:
+                if current:
+                    terms.append(current)
+                    current = ""
+            else:
+                current += char
+
+        if current:
+            terms.append(current)
+
+        return terms
+
+    def _compile_regex_term(self, term: str) -> re.Pattern[str] | None:
+        """Compile a term as regex if it's in /pattern/ format."""
+        if term.startswith("/") and term.endswith("/") and len(term) > 2:
+            try:
+                return re.compile(term[1:-1], re.IGNORECASE)
+            except re.error:
+                self.notify(f"Invalid regex: {term}", severity="error")
+                return None
+        return None
 
     def _apply_filter(self) -> None:
         """Apply the current filter to messages."""
@@ -601,9 +656,12 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self._hide_filter_input()
 
         # Clear filter state
-        if self.filter_text or self.filter_type:
+        if self.filter_text or self.filter_type or self.include_terms or self.exclude_terms:
             self.filter_text = ""
-            self.filter_regex = None
+            self.include_terms = []
+            self.exclude_terms = []
+            self.include_regexes = []
+            self.exclude_regexes = []
             self.filter_type = None
             self._apply_filter()
             self.notify("Filters cleared")
