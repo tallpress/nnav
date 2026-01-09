@@ -100,7 +100,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         Binding("f", "toggle_tail", "Tail"),
         Binding("slash", "start_filter", "Filter"),
         Binding("escape", "clear_filter", "Clear Filter", show=False),
-        Binding("t", "filter_type", "Type Filter"),
+        Binding("T", "filter_type", "Type Filter"),
         Binding("F", "toggle_fullscreen", "Fullscreen"),
         Binding("i", "connection_info", "Info"),
         Binding("r", "republish", "Republish", show=False),
@@ -116,7 +116,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         Binding("k", "cursor_up", "Up", show=False),
         Binding("g", "cursor_top", "Top", show=False),
         Binding("G", "cursor_bottom", "Bottom", show=False),
-        Binding("T", "subject_tree", "Subject Tree"),
+        Binding("t", "subject_tree", "Subject Tree"),
     ]
 
     def __init__(
@@ -398,7 +398,9 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             return self._matches_subject_pattern(msg.subject, term)
         else:
             term_lower = term.lower()
-            return term_lower in msg.subject.lower() or term_lower in msg.payload.lower()
+            return (
+                term_lower in msg.subject.lower() or term_lower in msg.payload.lower()
+            )
 
     def _matches_subject_pattern(self, subject: str, pattern: str) -> bool:
         """Check if subject matches NATS wildcard pattern."""
@@ -656,7 +658,12 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self._hide_filter_input()
 
         # Clear filter state
-        if self.filter_text or self.filter_type or self.include_terms or self.exclude_terms:
+        if (
+            self.filter_text
+            or self.filter_type
+            or self.include_terms
+            or self.exclude_terms
+        ):
             self.filter_text = ""
             self.include_terms = []
             self.exclude_terms = []
@@ -841,9 +848,15 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             data = self._message_to_dict(stored.msg)
 
             # Include related request/response if available
-            if stored.related_index is not None and 0 <= stored.related_index < len(self.messages):
+            if stored.related_index is not None and 0 <= stored.related_index < len(
+                self.messages
+            ):
                 related = self.messages[stored.related_index].msg
-                key = "response" if stored.msg.message_type == MessageType.REQUEST else "request"
+                key = (
+                    "response"
+                    if stored.msg.message_type == MessageType.REQUEST
+                    else "request"
+                )
                 data[key] = self._message_to_dict(related)
 
             if copy_to_clipboard(json.dumps(data, indent=2)):

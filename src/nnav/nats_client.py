@@ -148,7 +148,9 @@ class NatsSubscriber:
         """Publish a message to a subject."""
         if not self._client:
             raise RuntimeError("Not connected to NATS server")
-        await self._client.publish(subject, payload, reply=reply_to or "", headers=headers)
+        await self._client.publish(
+            subject, payload, reply=reply_to or "", headers=headers
+        )
 
     async def subscribe_all(self) -> AsyncIterator[NatsMessage]:
         """Subscribe to subjects and yield messages with RPC tracking."""
