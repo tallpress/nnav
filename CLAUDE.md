@@ -48,7 +48,7 @@ make clean          # Remove caches and venv
 
 - Real-time streaming with wildcard subscriptions (`*`, `>`)
 - Request/response RPC matching with latency tracking
-- Filtering: text, regex (`/pattern/`), message type (REQ/RES/PUB), subject wildcards
+- Filtering: text, regex (`/pattern/`), exclude (`!pattern`), message type (REQ/RES/PUB), subject wildcards
 - Subject tree browser (hierarchical view with counts)
 - JSON syntax highlighting and path queries (`.user.name`)
 - Message diff between bookmarked messages
@@ -61,7 +61,7 @@ make clean          # Remove caches and venv
 |-----|--------|-----|--------|
 | j/k | Navigate | p | Pause/Resume |
 | Enter | View details | m | Bookmark |
-| / | Filter | n/N | Next/Prev bookmark |
+| / | Filter (use ! to exclude) | n/N | Next/Prev bookmark |
 | t | Type filter | d | Diff bookmarks |
 | T | Subject tree | y/Y | Copy payload/subject |
 | e/E | Export all/filtered | ? | Help |
