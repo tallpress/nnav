@@ -29,6 +29,7 @@ from nnav.ui import (
     FilterMixin,
     FullscreenMixin,
     HelpScreen,
+    JetStreamBrowserScreen,
     MessageDetailScreen,
     PublishScreen,
     StoredMessage,
@@ -120,6 +121,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         Binding("g", "cursor_top", "Top", show=False),
         Binding("G", "cursor_bottom", "Bottom", show=False),
         Binding("t", "subject_tree", "Subject Tree"),
+        Binding("J", "jetstream_browser", "JetStream"),
     ]
 
     def __init__(
@@ -137,6 +139,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         export_path: str | None = None,
         jetstream_config: JetStreamConfig | None = None,
         theme_configs: list[ThemeConfig] | None = None,
+        start_with_jetstream_browser: bool = False,
     ) -> None:
         super().__init__()
         # Register custom themes from config before setting theme
@@ -162,6 +165,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self.tail_mode = True  # Auto-scroll to new messages
         self.filter_text = ""  # Current filter text for FilterMixin
         self.message_filter = MessageFilter(hide_config=hide)
+        self._start_with_jetstream_browser = start_with_jetstream_browser
         self.messages: list[StoredMessage] = []
         self.filtered_indices: list[int] = []
         self.bookmark_indices: list[int] = []
@@ -213,6 +217,10 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             self.run_worker(self._subscribe_messages(), exclusive=True)
 
         self._update_status()
+
+        # Show JetStream browser on startup if requested
+        if self._start_with_jetstream_browser:
+            self.call_after_refresh(self._show_jetstream_browser)
 
     def _update_status(self) -> None:
         """Update the status bar."""
@@ -857,3 +865,33 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
                 self.notify(f"Filtering: {subject_pattern}")
 
         self.push_screen(SubjectTreeScreen(root), handle_result)
+
+    def _show_jetstream_browser(self) -> None:
+        """Show the JetStream browser screen."""
+        if self.viewer_mode or not self.subscriber:
+            self.notify("JetStream browser requires a NATS connection", severity="warning")
+            return
+
+        def handle_result(config: JetStreamConfig | None) -> None:
+            if config:
+                # Clear existing messages and restart with new JetStream subscription
+                table = self.query_one(DataTable)
+                table.clear()
+                self.messages.clear()
+                self.filtered_indices.clear()
+                self.bookmark_indices.clear()
+                self._pending_requests.clear()
+
+                self.jetstream_config = config
+                stream = config.stream
+                policy = config.deliver_policy.value
+                self.sub_title = f"JetStream: {stream} ({policy})"
+
+                # Restart subscription with new config
+                self.run_worker(self._subscribe_messages(), exclusive=True)
+
+        self.push_screen(JetStreamBrowserScreen(self.subscriber), handle_result)
+
+    def action_jetstream_browser(self) -> None:
+        """Show JetStream stream browser."""
+        self._show_jetstream_browser()
