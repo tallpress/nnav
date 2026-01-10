@@ -170,6 +170,8 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self._pending_requests: dict[str, int] = {}
         # Double-press confirmation for clear
         self._last_clear_press: float | None = None
+        # Prefix to strip from subject display when filtering via tree view
+        self.tree_filter_prefix: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -356,7 +358,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         if self.columns.type:
             row_data.append(type_str)
         if self.columns.subject:
-            row_data.append(msg.subject)
+            row_data.append(self._get_display_subject(msg.subject))
         if self.columns.latency:
             row_data.append(latency_str)
         if self.columns.payload:
@@ -417,6 +419,21 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         except re.error:
             return False
 
+    def _get_display_subject(self, subject: str) -> str:
+        """Get subject for display, stripping tree filter prefix if applicable."""
+        if not self.tree_filter_prefix:
+            return subject
+
+        prefix = self.tree_filter_prefix
+        if subject.startswith(prefix + "."):
+            return "..." + subject[len(prefix) + 1 :]
+        elif subject == prefix:
+            # Exact match - show last segment with ellipsis
+            parts = subject.rsplit(".", 1)
+            return "..." + parts[-1] if len(parts) > 1 else subject
+
+        return subject
+
     def _get_selected_index(self) -> int | None:
         """Get the index into self.messages for the selected row."""
         table = self.query_one(DataTable)
@@ -470,6 +487,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         """Handle filter input submission."""
         if event.input.id == "filter":
             self.filter_text = event.value
+            self.tree_filter_prefix = None  # Clear tree prefix for manual filters
             self._parse_filter_terms(event.value)
             self._apply_filter()
             if not event.value:  # Only hide if filter is empty
@@ -577,7 +595,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
                 if self.columns.type:
                     row_data.append(type_str)
                 if self.columns.subject:
-                    row_data.append(msg.subject)
+                    row_data.append(self._get_display_subject(msg.subject))
                 if self.columns.latency:
                     row_data.append(latency_str)
                 if self.columns.payload:
@@ -665,6 +683,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             or self.filter_type
             or self.include_terms
             or self.exclude_terms
+            or self.tree_filter_prefix
         ):
             self.filter_text = ""
             self.include_terms = []
@@ -672,6 +691,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             self.include_regexes = []
             self.exclude_regexes = []
             self.filter_type = None
+            self.tree_filter_prefix = None
             self._apply_filter()
             self.notify("Filters cleared")
 
@@ -925,6 +945,17 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
                 # Set as filter
                 self.filter_text = subject_pattern
                 self.filter_regex = None
+                # Set prefix for subject display stripping
+                if subject_pattern.endswith(".>"):
+                    self.tree_filter_prefix = subject_pattern[:-2]
+                else:
+                    # Leaf node - strip all but last segment
+                    self.tree_filter_prefix = (
+                        subject_pattern.rsplit(".", 1)[0]
+                        if "." in subject_pattern
+                        else None
+                    )
+                self._parse_filter_terms(subject_pattern)
                 self._apply_filter()
                 self.notify(f"Filtering: {subject_pattern}")
 
