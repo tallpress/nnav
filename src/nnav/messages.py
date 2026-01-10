@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from nnav.nats_client import MessageType, NatsMessage
+from nnav.utils.patterns import matches_nats_pattern
 
 
 def load_messages(path: Path) -> list[NatsMessage]:
@@ -240,10 +241,7 @@ def matches_subject_pattern(subject: str, pattern: str) -> bool:
     Returns:
         True if subject matches pattern
     """
-    # Convert NATS wildcards to regex
-    regex_pattern = pattern.replace(".", r"\.").replace("*", r"[^.]+").replace(">", r".+")
-    regex = re.compile(f"^{regex_pattern}$")
-    return bool(regex.match(subject))
+    return matches_nats_pattern(subject, pattern)
 
 
 def matches_filter(msg: NatsMessage, filter_text: str) -> bool:
