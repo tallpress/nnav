@@ -132,10 +132,8 @@ def main(
     # Load config file
     config = load_config()
 
-    # JetStream browser mode
+    # JetStream browser mode - launch NatsVisApp with browser screen on startup
     if jetstream:
-        from nnav.jetstream_app import JetStreamApp
-
         # Determine server URL
         js_server: str
         js_user: str | None = None
@@ -155,7 +153,7 @@ def main(
         else:
             js_server = "nats://localhost:4222"
 
-        js_app = JetStreamApp(
+        app = NatsVisApp(
             server_url=js_server,
             user=js_user,
             password=js_password,
@@ -166,25 +164,9 @@ def main(
             columns=config.columns,
             export_path=config.export_path,
             theme_configs=config.themes,
+            start_with_jetstream_browser=True,
         )
-        js_config = js_app.run()
-
-        # If a stream was selected, launch watch mode
-        if js_config:
-            watch_app = NatsVisApp(
-                server_url=js_server,
-                user=js_user,
-                password=js_password,
-                preview_theme=config.appearance.preview_theme,
-                textual_theme=config.appearance.theme,
-                fullscreen=config.appearance.fullscreen,
-                hide=config.hide,
-                columns=config.columns,
-                export_path=config.export_path,
-                jetstream_config=js_config,
-                theme_configs=config.themes,
-            )
-            watch_app.run()
+        app.run()
         return
 
     # TUI mode
