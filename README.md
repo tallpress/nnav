@@ -107,6 +107,8 @@ When selecting a stream, you can choose:
 
 After selecting, nnav switches to watch mode with all the usual features (filtering, bookmarks, export).
 
+Press `J` anytime while watching to switch to a different stream without restarting.
+
 ### Headless Mode
 
 Filter and export without the TUI - useful for scripts and CI.
