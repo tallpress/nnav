@@ -33,6 +33,8 @@ from nnav.ui import (
     SubjectNode,
     SubjectTreeScreen,
 )
+from nnav.constants import CLEAR_DOUBLE_PRESS_TIMEOUT, PAYLOAD_PREVIEW_WIDTH
+from nnav.core.filter import MessageFilter
 from nnav.utils.clipboard import copy_to_clipboard
 
 
@@ -157,12 +159,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             )
         self.paused = False
         self.tail_mode = True  # Auto-scroll to new messages
-        self.filter_text = ""
-        self.filter_type: MessageType | None = None
-        self.include_terms: list[str] = []
-        self.exclude_terms: list[str] = []
-        self.include_regexes: list[re.Pattern[str] | None] = []
-        self.exclude_regexes: list[re.Pattern[str] | None] = []
+        self.message_filter = MessageFilter(hide_config=hide)
         self.messages: list[StoredMessage] = []
         self.filtered_indices: list[int] = []
         self.bookmark_indices: list[int] = []
@@ -170,8 +167,6 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self._pending_requests: dict[str, int] = {}
         # Double-press confirmation for clear
         self._last_clear_press: float | None = None
-        # Prefix to strip from subject display when filtering via tree view
-        self.tree_filter_prefix: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -236,14 +231,15 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             if self.tail_mode:
                 parts.append("[TAIL]")
 
-        if self.include_terms:
-            parts.append(f"Filter: {' '.join(self.include_terms)}")
+        state = self.message_filter.state
+        if state.include_terms:
+            parts.append(f"Filter: {' '.join(t.text for t in state.include_terms)}")
 
-        if self.exclude_terms:
-            parts.append(f"Exclude: {' '.join(self.exclude_terms)}")
+        if state.exclude_terms:
+            parts.append(f"Exclude: {' '.join(t.text for t in state.exclude_terms)}")
 
-        if self.filter_type:
-            parts.append(f"Type: {self.filter_type.value}")
+        if state.message_type:
+            parts.append(f"Type: {state.message_type.value}")
 
         if not self.viewer_mode and self.subscriber:
             pending = self.subscriber.rpc_tracker.pending_count
@@ -307,15 +303,6 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         """Add a message to the table."""
         table = self.query_one(DataTable)
 
-        time_str = msg.timestamp.strftime("%H:%M:%S.%f")[:-3]
-        type_str = msg.message_type.value
-        latency_str = f"{msg.latency_ms:.1f}ms" if msg.latency_ms else ""
-
-        # Truncate payload for display
-        payload_display = msg.payload.replace("\n", " ")[:80]
-        if len(msg.payload) > 80:
-            payload_display += "..."
-
         stored = StoredMessage(msg=msg, row_key=None, imported=imported)
         msg_index = len(self.messages)
         self.messages.append(stored)
@@ -337,19 +324,41 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
                 self.messages[request_index].related_index = msg_index
 
         # Check if internal message should be hidden (but RPC tracking above still happens)
-        if self.hide.inbox and msg.subject.startswith("_INBOX."):
-            return
-        if self.hide.jetstream and msg.subject.startswith("$JS."):
-            return
-        if self.hide.jetstream_ack and msg.reply_to and msg.reply_to.startswith("$JS.ACK."):
+        if self._should_hide_message(msg):
             return
 
         # Check filters
         if not self._matches_filter(msg):
             return
 
-        # Build row data based on enabled columns
-        marker = Text("I", style=Style(color="bright_black")) if imported else ""
+        row_data = self._build_row_data(msg, stored)
+        row_key = table.add_row(*row_data)
+        stored.row_key = row_key
+        self.filtered_indices.append(msg_index)
+
+        # Auto-scroll only if tail mode is on
+        if self.tail_mode:
+            table.scroll_end()
+
+    def _build_row_data(
+        self, msg: NatsMessage, stored: StoredMessage
+    ) -> list[str | Text]:
+        """Build row data for a message based on enabled columns."""
+        time_str = msg.timestamp.strftime("%H:%M:%S.%f")[:-3]
+        type_str = msg.message_type.value
+        latency_str = f"{msg.latency_ms:.1f}ms" if msg.latency_ms else ""
+        payload_display = msg.payload.replace("\n", " ")[:PAYLOAD_PREVIEW_WIDTH]
+        if len(msg.payload) > PAYLOAD_PREVIEW_WIDTH:
+            payload_display += "..."
+
+        # Marker: bookmark takes precedence, then imported
+        if stored.bookmarked:
+            marker = Text("★", style=Style(color="yellow", bold=True))
+        elif stored.imported:
+            marker = Text("I", style=Style(color="bright_black"))
+        else:
+            marker = Text("")
+
         row_data: list[str | Text] = []
         if self.columns.marker:
             row_data.append(marker)
@@ -363,76 +372,19 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             row_data.append(latency_str)
         if self.columns.payload:
             row_data.append(payload_display)
-
-        row_key = table.add_row(*row_data)
-        stored.row_key = row_key
-        self.filtered_indices.append(msg_index)
-
-        # Auto-scroll only if tail mode is on
-        if self.tail_mode:
-            table.scroll_end()
+        return row_data
 
     def _matches_filter(self, msg: NatsMessage) -> bool:
         """Check if message matches current filters."""
-        # Type filter
-        if self.filter_type and msg.message_type != self.filter_type:
-            return False
+        return self.message_filter.matches(msg)
 
-        # Include terms - message must match ALL include terms
-        for i, term in enumerate(self.include_terms):
-            regex = self.include_regexes[i] if i < len(self.include_regexes) else None
-            if not self._term_matches(term, msg, regex):
-                return False
-
-        # Exclude terms - message must NOT match ANY exclude term
-        for i, term in enumerate(self.exclude_terms):
-            regex = self.exclude_regexes[i] if i < len(self.exclude_regexes) else None
-            if self._term_matches(term, msg, regex):
-                return False
-
-        return True
-
-    def _term_matches(
-        self, term: str, msg: NatsMessage, regex: re.Pattern[str] | None
-    ) -> bool:
-        """Check if a single term matches the message."""
-        if regex:
-            return bool(regex.search(msg.subject) or regex.search(msg.payload))
-        elif ">" in term or "*" in term:
-            return self._matches_subject_pattern(msg.subject, term)
-        else:
-            term_lower = term.lower()
-            return (
-                term_lower in msg.subject.lower() or term_lower in msg.payload.lower()
-            )
-
-    def _matches_subject_pattern(self, subject: str, pattern: str) -> bool:
-        """Check if subject matches NATS wildcard pattern."""
-        # Convert NATS wildcards to regex
-        # * matches a single token (no dots)
-        # > matches one or more tokens (greedy, only at end)
-        regex_pattern = (
-            pattern.replace(".", r"\.").replace("*", r"[^.]+").replace(">", r".+")
-        )
-        try:
-            return bool(re.match(f"^{regex_pattern}$", subject))
-        except re.error:
-            return False
+    def _should_hide_message(self, msg: NatsMessage) -> bool:
+        """Check if message should be hidden based on hide config."""
+        return self.message_filter.should_hide(msg)
 
     def _get_display_subject(self, subject: str) -> str:
         """Get subject for display, stripping tree filter prefix if applicable."""
-        if not self.tree_filter_prefix:
-            return subject
-
-        prefix = self.tree_filter_prefix
-        if subject.startswith(prefix + "."):
-            return "..." + subject[len(prefix) + 1 :]
-        elif subject == prefix:
-            # Exact match - show last segment with ellipsis
-            parts = subject.rsplit(".", 1)
-            return "..." + parts[-1] if len(parts) > 1 else subject
-
-        return subject
+        return self.message_filter.get_display_subject(subject)
 
     def _get_selected_index(self) -> int | None:
         """Get the index into self.messages for the selected row."""
@@ -486,8 +438,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle filter input submission."""
         if event.input.id == "filter":
-            self.filter_text = event.value
-            self.tree_filter_prefix = None  # Clear tree prefix for manual filters
+            self.message_filter.set_tree_prefix(None)  # Clear tree prefix for manual filters
             self._parse_filter_terms(event.value)
             self._apply_filter()
             if not event.value:  # Only hide if filter is empty
@@ -495,63 +446,11 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             self._focus_table()
 
     def _parse_filter_terms(self, filter_text: str) -> None:
-        """Parse filter text into include and exclude terms with their regexes."""
-        self.include_terms = []
-        self.exclude_terms = []
-        self.include_regexes = []
-        self.exclude_regexes = []
-
-        if not filter_text.strip():
-            return
-
-        # Split on spaces, but respect /regex/ boundaries
-        terms = self._split_filter_terms(filter_text)
-
-        for term in terms:
-            if term.startswith("!"):
-                pattern = term[1:]  # Remove ! prefix
-                if pattern:  # Ignore lone !
-                    self.exclude_terms.append(pattern)
-                    self.exclude_regexes.append(self._compile_regex_term(pattern))
-            else:
-                if term:
-                    self.include_terms.append(term)
-                    self.include_regexes.append(self._compile_regex_term(term))
-
-    def _split_filter_terms(self, filter_text: str) -> list[str]:
-        """Split filter text on spaces, respecting /regex/ boundaries."""
-        terms: list[str] = []
-        current = ""
-        in_regex = False
-
-        for char in filter_text:
-            if char == "/" and not in_regex:
-                in_regex = True
-                current += char
-            elif char == "/" and in_regex:
-                in_regex = False
-                current += char
-            elif char == " " and not in_regex:
-                if current:
-                    terms.append(current)
-                    current = ""
-            else:
-                current += char
-
-        if current:
-            terms.append(current)
-
-        return terms
-
-    def _compile_regex_term(self, term: str) -> re.Pattern[str] | None:
-        """Compile a term as regex if it's in /pattern/ format."""
-        if term.startswith("/") and term.endswith("/") and len(term) > 2:
-            try:
-                return re.compile(term[1:-1], re.IGNORECASE)
-            except re.error:
-                self.notify(f"Invalid regex: {term}", severity="error")
-                return None
-        return None
+        """Parse filter text into include and exclude terms."""
+        self.message_filter.parse(filter_text)
+        # Show any parse errors
+        for error in self.message_filter.parse_errors:
+            self.notify(error, severity="error")
 
     def _apply_filter(self) -> None:
         """Apply the current filter to messages."""
@@ -563,44 +462,12 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             msg = stored.msg
 
             # Skip internal messages if hidden
-            if self.hide.inbox and msg.subject.startswith("_INBOX."):
-                stored.row_key = None
-                continue
-            if self.hide.jetstream and msg.subject.startswith("$JS."):
+            if self._should_hide_message(msg):
                 stored.row_key = None
                 continue
 
             if self._matches_filter(msg):
-                time_str = msg.timestamp.strftime("%H:%M:%S.%f")[:-3]
-                type_str = msg.message_type.value
-                latency_str = f"{msg.latency_ms:.1f}ms" if msg.latency_ms else ""
-                payload_display = msg.payload.replace("\n", " ")[:80]
-                if len(msg.payload) > 80:
-                    payload_display += "..."
-
-                # First column: bookmark takes precedence, then imported marker
-                if stored.bookmarked:
-                    marker = Text("★", style=Style(color="yellow", bold=True))
-                elif stored.imported:
-                    marker = Text("I", style=Style(color="bright_black"))
-                else:
-                    marker = Text("")
-
-                # Build row data based on enabled columns
-                row_data: list[str | Text] = []
-                if self.columns.marker:
-                    row_data.append(marker)
-                if self.columns.time:
-                    row_data.append(time_str)
-                if self.columns.type:
-                    row_data.append(type_str)
-                if self.columns.subject:
-                    row_data.append(self._get_display_subject(msg.subject))
-                if self.columns.latency:
-                    row_data.append(latency_str)
-                if self.columns.payload:
-                    row_data.append(payload_display)
-
+                row_data = self._build_row_data(msg, stored)
                 row_key = table.add_row(*row_data)
                 stored.row_key = row_key
                 self.filtered_indices.append(i)
@@ -636,8 +503,11 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
     def action_clear(self) -> None:
         """Clear all messages (requires double-press)."""
         now = time.monotonic()
-        if self._last_clear_press is not None and (now - self._last_clear_press) < 1.5:
-            # Second press within 1.5 seconds - clear messages
+        if (
+            self._last_clear_press is not None
+            and (now - self._last_clear_press) < CLEAR_DOUBLE_PRESS_TIMEOUT
+        ):
+            # Second press - clear messages
             table = self.query_one(DataTable)
             table.clear()
             self.messages.clear()
@@ -678,20 +548,15 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self._hide_filter_input()
 
         # Clear filter state
+        state = self.message_filter.state
         if (
-            self.filter_text
-            or self.filter_type
-            or self.include_terms
-            or self.exclude_terms
-            or self.tree_filter_prefix
+            state.text
+            or state.message_type
+            or state.include_terms
+            or state.exclude_terms
+            or state.tree_prefix
         ):
-            self.filter_text = ""
-            self.include_terms = []
-            self.exclude_terms = []
-            self.include_regexes = []
-            self.exclude_regexes = []
-            self.filter_type = None
-            self.tree_filter_prefix = None
+            self.message_filter.clear()
             self._apply_filter()
             self.notify("Filters cleared")
 
@@ -700,11 +565,13 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
     def action_filter_type(self) -> None:
         """Cycle through message type filters."""
         types = [None, MessageType.REQUEST, MessageType.RESPONSE, MessageType.PUBLISH]
-        current_idx = types.index(self.filter_type) if self.filter_type in types else 0
-        self.filter_type = types[(current_idx + 1) % len(types)]
+        current_type = self.message_filter.state.message_type
+        current_idx = types.index(current_type) if current_type in types else 0
+        new_type = types[(current_idx + 1) % len(types)]
+        self.message_filter.set_type_filter(new_type)
         self._apply_filter()
 
-        type_name = self.filter_type.value if self.filter_type else "All"
+        type_name = new_type.value if new_type else "All"
         self.notify(f"Type filter: {type_name}")
 
     def action_connection_info(self) -> None:
@@ -908,14 +775,11 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         root = SubjectNode(name="", full_subject="", count=0, children={})
 
         for stored in self.messages:
-            subject = stored.msg.subject
-
             # Skip hidden subjects
-            if self.hide.inbox and subject.startswith("_INBOX."):
-                continue
-            if self.hide.jetstream and subject.startswith("$JS."):
+            if self._should_hide_message(stored.msg):
                 continue
 
+            subject = stored.msg.subject
             parts = subject.split(".")
             current = root
 
@@ -942,19 +806,18 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
 
         def handle_result(subject_pattern: str | None) -> None:
             if subject_pattern:
-                # Set as filter
-                self.filter_text = subject_pattern
-                self.filter_regex = None
                 # Set prefix for subject display stripping
+                tree_prefix: str | None
                 if subject_pattern.endswith(".>"):
-                    self.tree_filter_prefix = subject_pattern[:-2]
+                    tree_prefix = subject_pattern[:-2]
                 else:
                     # Leaf node - strip all but last segment
-                    self.tree_filter_prefix = (
+                    tree_prefix = (
                         subject_pattern.rsplit(".", 1)[0]
                         if "." in subject_pattern
                         else None
                     )
+                self.message_filter.set_tree_prefix(tree_prefix)
                 self._parse_filter_terms(subject_pattern)
                 self._apply_filter()
                 self.notify(f"Filtering: {subject_pattern}")
