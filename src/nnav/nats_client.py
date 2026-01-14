@@ -138,6 +138,13 @@ class NatsSubscriber:
         """Check if connected to NATS."""
         return self._client is not None and self._client.is_connected
 
+    @property
+    def js(self) -> "nats.js.JetStreamContext | None":
+        """Get JetStream context if connected."""
+        if self._client:
+            return self._client.jetstream()
+        return None
+
     async def publish(
         self,
         subject: str,

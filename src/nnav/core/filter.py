@@ -108,12 +108,12 @@ class MessageFilter:
             return True
         if self.hide_config.jetstream and msg.subject.startswith("$JS."):
             return True
-        if (
-            self.hide_config.jetstream_ack
-            and msg.reply_to
-            and msg.reply_to.startswith("$JS.ACK.")
-        ):
-            return True
+        if self.hide_config.jetstream_ack:
+            # Hide messages with $JS.ACK in subject or reply_to
+            if msg.subject.startswith("$JS.ACK."):
+                return True
+            if msg.reply_to and msg.reply_to.startswith("$JS.ACK."):
+                return True
         return False
 
     def matches(self, msg: NatsMessage) -> bool:
