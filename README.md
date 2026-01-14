@@ -2,6 +2,8 @@
 
 A terminal UI for exploring NATS messages with filtering, request/response matching, and JSON tools inspired by lnav (https://lnav.org/)
 
+To contribute, raise a pull request or open an issue
+
 ## Contents
 
 - [Features](#features)
