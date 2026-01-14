@@ -172,6 +172,16 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         # Double-press confirmation for clear
         self._last_clear_press: float | None = None
 
+    @property
+    def filter_text(self) -> str:
+        """Get current filter text for FilterMixin compatibility."""
+        return self.message_filter.state.text
+
+    @filter_text.setter
+    def filter_text(self, value: str) -> None:
+        """Set current filter text for FilterMixin compatibility."""
+        self.message_filter.state.text = value
+
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="main-container"):
@@ -249,6 +259,9 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         if state.message_type:
             parts.append(f"Type: {state.message_type.value}")
 
+        if state.tree_prefix:
+            parts.append(f"Tree: {state.tree_prefix}")
+
         if not self.viewer_mode and self.subscriber:
             pending = self.subscriber.rpc_tracker.pending_count
             if pending > 0:
@@ -257,8 +270,6 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         bookmarks = len(self.bookmark_indices)
         if bookmarks > 0:
             parts.append(f"Bookmarks: {bookmarks}")
-
-        parts.append(f"Msgs: {len(self.messages)}")
 
         status.update(" | ".join(parts))
 
