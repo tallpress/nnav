@@ -337,8 +337,9 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         stored.row_key = row_key
         self.filtered_indices.append(msg_index)
 
-        # Auto-scroll only if tail mode is on
+        # Auto-scroll and keep cursor at bottom if tail mode is on
         if self.tail_mode:
+            table.move_cursor(row=table.row_count - 1)
             table.scroll_end()
 
     def _build_row_data(
@@ -758,14 +759,25 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
 
     def action_cursor_down(self) -> None:
         """Move cursor down (vim j)."""
-        self.query_one(DataTable).action_cursor_down()
+        table = self.query_one(DataTable)
+        # Disable tail mode if not already at bottom
+        if self.tail_mode and table.cursor_row < table.row_count - 1:
+            self.tail_mode = False
+            self._update_status()
+        table.action_cursor_down()
 
     def action_cursor_up(self) -> None:
         """Move cursor up (vim k)."""
+        if self.tail_mode:
+            self.tail_mode = False
+            self._update_status()
         self.query_one(DataTable).action_cursor_up()
 
     def action_cursor_top(self) -> None:
         """Move cursor to top (vim g)."""
+        if self.tail_mode:
+            self.tail_mode = False
+            self._update_status()
         self.query_one(DataTable).move_cursor(row=0)
 
     def action_cursor_bottom(self) -> None:
