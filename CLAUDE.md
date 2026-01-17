@@ -79,7 +79,7 @@ make clean          # Remove caches and venv
 | t | Type filter | d | Diff bookmarks |
 | T | Subject tree | y/Y | Copy payload/subject |
 | e/E | Export all/filtered | J | JetStream browser |
-| ? | Help | q | Quit |
+| ? | Help | ctrl+c | Quit |
 
 ## Configuration
 
