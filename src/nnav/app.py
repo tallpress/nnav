@@ -112,6 +112,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         Binding("n", "next_bookmark", "Next Mark"),
         Binding("N", "prev_bookmark", "Prev Mark", show=False),
         Binding("d", "diff_bookmarks", "Diff", show=False),
+        Binding("R", "export_range", "Export Range", show=False),
         Binding("y", "copy_payload", "Copy", show=False),
         Binding("Y", "copy_message", "Copy Message", show=False),
         Binding("j", "cursor_down", "Down", show=False),
@@ -617,6 +618,21 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self.push_screen(
             ExportScreen(filtered, filtered_only=True, default_path=self.export_path)
         )
+
+    def action_export_range(self) -> None:
+        """Export messages between first and last bookmarks."""
+        if len(self.bookmark_indices) < 2:
+            self.notify("Need at least 2 bookmarks to export range", severity="warning")
+            return
+
+        # bookmark_indices is kept sorted, so first/last are min/max
+        start_idx = self.bookmark_indices[0]
+        end_idx = self.bookmark_indices[-1]
+
+        # Get all messages in range (inclusive)
+        range_messages = self.messages[start_idx : end_idx + 1]
+
+        self.push_screen(ExportScreen(range_messages, default_path=self.export_path))
 
     def action_toggle_bookmark(self) -> None:
         """Toggle bookmark on current message."""
