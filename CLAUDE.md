@@ -13,10 +13,22 @@ The lnav equivalent for NATS. A terminal UI for visualizing and debugging NATS m
 ```
 src/nnav/
 ├── __main__.py      # CLI entry point (Click) - mode routing
-├── app.py           # Main TUI application (Textual) - largest module
+├── app.py           # Main TUI application (Textual)
 ├── config.py        # Configuration loading from ~/.config/nnav/config.toml
 ├── nats_client.py   # NATS connection, RPC tracking, message types
-└── headless.py      # Headless mode for batch processing
+├── headless.py      # Headless mode for batch processing
+├── constants.py     # Shared constants
+├── core/
+│   └── filter.py    # Message filtering logic (FilterState, MessageFilter)
+├── ui/
+│   ├── screens.py   # Modal screens (HelpScreen, MessageDetailScreen, etc.)
+│   ├── jetstream_screens.py  # JetStream browser screens
+│   ├── mixins.py    # Shared UI mixins (FilterMixin, FullscreenMixin)
+│   └── widgets.py   # Custom widgets (FilterInput)
+└── utils/
+    ├── clipboard.py # Clipboard operations
+    ├── formatting.py # Display formatting
+    └── patterns.py  # NATS pattern matching
 tests/               # pytest tests (currently empty)
 ```
 
@@ -43,6 +55,8 @@ make clean          # Remove caches and venv
 - `NatsSubscriber`: AsyncIO NATS connection manager
 - `NatsVisApp`: Main Textual application
 - `StoredMessage`: UI wrapper with bookmarks, import status
+- `MessageFilter`: Filtering logic with text, regex, type, and tree prefix support
+- `JetStreamBrowserScreen`: Modal screen for browsing JetStream streams
 
 ## Features
 
@@ -64,8 +78,8 @@ make clean          # Remove caches and venv
 | / | Filter (use ! to exclude) | n/N | Next/Prev bookmark |
 | t | Type filter | d | Diff bookmarks |
 | T | Subject tree | y/Y | Copy payload/subject |
-| e/E | Export all/filtered | ? | Help |
-| q | Quit | | |
+| e/E | Export all/filtered | J | JetStream browser |
+| ? | Help | ctrl+c | Quit |
 
 ## Configuration
 
@@ -91,6 +105,9 @@ nnav -s nats://localhost:4222 -S "orders.>"
 
 # Viewer mode - load saved session
 nnav -i session.json
+
+# JetStream mode - browse streams, select to watch
+nnav -J
 
 # Headless mode - filter and export
 nnav -i input.json -f "error" -t REQ -e errors.json
