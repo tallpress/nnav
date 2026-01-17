@@ -159,6 +159,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             )
         self.paused = False
         self.tail_mode = True  # Auto-scroll to new messages
+        self.filter_text = ""  # Current filter text for FilterMixin
         self.message_filter = MessageFilter(hide_config=hide)
         self.messages: list[StoredMessage] = []
         self.filtered_indices: list[int] = []
@@ -438,6 +439,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle filter input submission."""
         if event.input.id == "filter":
+            self.filter_text = event.value
             self.message_filter.set_tree_prefix(None)  # Clear tree prefix for manual filters
             self._parse_filter_terms(event.value)
             self._apply_filter()
@@ -556,6 +558,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             or state.exclude_terms
             or state.tree_prefix
         ):
+            self.filter_text = ""
             self.message_filter.clear()
             self._apply_filter()
             self.notify("Filters cleared")
@@ -817,6 +820,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
                         if "." in subject_pattern
                         else None
                     )
+                self.filter_text = subject_pattern
                 self.message_filter.set_tree_prefix(tree_prefix)
                 self._parse_filter_terms(subject_pattern)
                 self._apply_filter()
