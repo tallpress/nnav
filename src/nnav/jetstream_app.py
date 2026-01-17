@@ -275,7 +275,7 @@ class JetStreamApp(FilterMixin, FullscreenMixin, App[JetStreamConfig | None]):
     """
 
     BINDINGS = [
-        Binding("q", "quit", "Quit"),
+        Binding("ctrl+c", "quit", "Quit", show=False),
         Binding("r", "refresh", "Refresh"),
         Binding("c", "view_consumers", "Consumers"),
         Binding("slash", "start_filter", "Filter"),

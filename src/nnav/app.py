@@ -13,6 +13,8 @@ from textual.widgets import DataTable, Footer, Header, Input, Static
 from textual.widgets.data_table import RowKey
 
 from nnav.config import ColumnsConfig, HideConfig, ThemeConfig
+from nnav.constants import CLEAR_DOUBLE_PRESS_TIMEOUT, PAYLOAD_PREVIEW_WIDTH
+from nnav.core.filter import MessageFilter
 from nnav.messages import load_messages
 from nnav.nats_client import JetStreamConfig, MessageType, NatsMessage, NatsSubscriber
 from nnav.themes import build_themes
@@ -33,8 +35,6 @@ from nnav.ui import (
     SubjectNode,
     SubjectTreeScreen,
 )
-from nnav.constants import CLEAR_DOUBLE_PRESS_TIMEOUT, PAYLOAD_PREVIEW_WIDTH
-from nnav.core.filter import MessageFilter
 from nnav.utils.clipboard import copy_to_clipboard
 
 
@@ -95,7 +95,7 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
     """
 
     BINDINGS = [
-        Binding("q", "quit", "Quit"),
+        Binding("ctrl+c", "quit", "Quit", show=False),
         Binding("?", "help", "Help"),
         Binding("c", "clear", "Clear"),
         Binding("p", "toggle_pause", "Pause"),
@@ -441,7 +441,9 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         """Handle filter input submission."""
         if event.input.id == "filter":
             self.filter_text = event.value
-            self.message_filter.set_tree_prefix(None)  # Clear tree prefix for manual filters
+            self.message_filter.set_tree_prefix(
+                None
+            )  # Clear tree prefix for manual filters
             self._parse_filter_terms(event.value)
             self._apply_filter()
             if not event.value:  # Only hide if filter is empty
