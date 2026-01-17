@@ -163,8 +163,8 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             )
         self.paused = False
         self.tail_mode = True  # Auto-scroll to new messages
-        self.filter_text = ""  # Current filter text for FilterMixin
         self.message_filter = MessageFilter(hide_config=hide)
+        self.filter_text = ""  # Current filter text for FilterMixin
         self._start_with_jetstream_browser = start_with_jetstream_browser
         self.messages: list[StoredMessage] = []
         self.filtered_indices: list[int] = []
