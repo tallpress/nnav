@@ -73,7 +73,7 @@ Config file at `~/.config/nnav/config.toml`:
 - `theme` - Pygments theme for JSON highlighting
 - `export_path` - Default export file path
 - `[connection]` - Default server URL, user, password
-- `[hide]` - Hide internal subjects: `inbox` (_INBOX.*), `jetstream` ($JS.*)
+- `[hide]` - Hide internal subjects: `inbox` (_INBOX.*), `jetstream` ($JS.*), `jetstream_ack` (consumer deliveries)
 - `[columns]` - Toggle columns: marker, time, type, subject, latency, payload
 
 ## Development Notes

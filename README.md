@@ -152,8 +152,9 @@ password = "mypassword"
 
 # Hide internal subjects from display (RPC correlation still works)
 [hide]
-inbox = true       # Hide _INBOX.* subjects
-jetstream = true   # Hide $JS.* subjects
+inbox = true         # Hide _INBOX.* subjects
+jetstream = true     # Hide $JS.* subjects
+jetstream_ack = true # Hide JetStream consumer deliveries (reply_to $JS.ACK.*)
 
 # Configure which columns to display
 [columns]
