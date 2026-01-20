@@ -7,6 +7,7 @@ To contribute, raise a pull request or open an issue
 ## Screenshots
 
 **Main view** - real-time message stream with filtering and rpc correlation
+![Browsing messages realtime](docs/normal.png)
 ![Main view](docs/preview.png)
 
 **Message detail** - json syntax highlighting with path queries and response latency for rpc
@@ -20,17 +21,24 @@ To contribute, raise a pull request or open an issue
 
 ## Contents
 
-- [Screenshots](#screenshots)
-- [Features](#features)
-- [Limitations](#limitations)
-- [Installation](#installation)
-- [Modes](#modes)
-  - [Watch Mode (Default)](#watch-mode-default)
-  - [JetStream Mode](#jetstream-mode)
-  - [Headless Mode](#headless-mode)
-- [Configuration](#configuration)
-- [File Formats](#file-formats)
-- [Development](#development)
+- [nnav](#nnav)
+  - [Screenshots](#screenshots)
+  - [Contents](#contents)
+  - [Features](#features)
+  - [Limitations](#limitations)
+  - [Installation](#installation)
+  - [Modes](#modes)
+    - [Watch Mode (Default)](#watch-mode-default)
+    - [JetStream Mode](#jetstream-mode)
+      - [Start Positions](#start-positions)
+    - [Headless Mode](#headless-mode)
+  - [Configuration](#configuration)
+  - [File Formats](#file-formats)
+    - [Context Files](#context-files)
+    - [Importing NATS CLI Output](#importing-nats-cli-output)
+  - [Demo](#demo)
+  - [Development](#development)
+  - [License](#license)
 
 ## Features
 
