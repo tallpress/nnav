@@ -4,27 +4,12 @@ A terminal UI for exploring NATS messages with filtering, request/response match
 
 To contribute, raise a pull request or open an issue
 
-## Screenshots
-
-**Main view** - real-time message stream with filtering and rpc correlation
-![Browsing messages realtime](docs/normal.png)
-![Main view](docs/preview.png)
-
-**Message detail** - json syntax highlighting with path queries and response latency for rpc
-![Message detail](docs/response_preview.png)
-
-**Subject tree** - hierarchical view of subjects with message counts, filtering on this
-![Subject tree](docs/subject_tree.png)
-
-**JetStream browser** - browse streams and consumers, select start position
-![JetStream browser](docs/jetstream_browser.png)
-
 ## Contents
 
 - [nnav](#nnav)
-  - [Screenshots](#screenshots)
   - [Contents](#contents)
   - [Features](#features)
+  - [Screenshots](#screenshots)
   - [Limitations](#limitations)
   - [Installation](#installation)
   - [Modes](#modes)
@@ -51,6 +36,21 @@ To contribute, raise a pull request or open an issue
 - **Headless mode** - Filter and export without TUI for scripting
 - **JetStream mode** - Browse streams/consumers, watch streams from any position
 
+
+## Screenshots
+
+**Main view** - real-time message stream with filtering and rpc correlation
+![Browsing messages realtime](docs/normal.png)
+![Main view](docs/preview.png)
+
+**Message detail** - json syntax highlighting with path queries and response latency for rpc
+![Message detail](docs/response_preview.png)
+
+**Subject tree** - hierarchical view of subjects with message counts, filtering on this
+![Subject tree](docs/subject_tree.png)
+
+**JetStream browser** - browse streams and consumers, select start position
+![JetStream browser](docs/jetstream_browser.png)
 
 ## Limitations
 - Assumes message payloads are JSON
