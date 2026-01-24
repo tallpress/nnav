@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -148,6 +149,7 @@ class HelpScreen(ModalScreen[None]):
             yield Label("  j / k      Scroll down / up", classes="help-row")
             yield Label("  g / G      Scroll to top / bottom", classes="help-row")
             yield Label("  /          JSON path query", classes="help-row")
+            yield Label("  :          Pipe to shell command", classes="help-row")
             yield Label(
                 "  r          Jump to related request/response", classes="help-row"
             )
@@ -171,6 +173,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
         Binding("g", "scroll_top", "Scroll Top", show=False),
         Binding("G", "scroll_bottom", "Scroll Bottom", show=False),
         Binding("r", "goto_related", "Go to Response/Request"),
+        Binding("colon", "pipe_command", "Pipe"),
     ]
 
     CSS = """
@@ -251,6 +254,31 @@ class MessageDetailScreen(ModalScreen[int | None]):
         width: 100%;
     }
 
+    #pipe-command-container {
+        height: auto;
+        display: none;
+        padding: 1;
+        background: $surface-darken-1;
+    }
+
+    #pipe-command-container.visible {
+        display: block;
+    }
+
+    #pipe-command-input {
+        width: 100%;
+    }
+
+    #transform-label {
+        color: $warning;
+        padding: 0 1;
+        display: none;
+    }
+
+    #transform-label.visible {
+        display: block;
+    }
+
     #hint {
         text-align: center;
         color: $text-muted;
@@ -273,6 +301,10 @@ class MessageDetailScreen(ModalScreen[int | None]):
         self._is_json = False
         self._current_path: str | None = None
         self._current_result: object = None
+        # Pipe command state
+        self._pipe_output: str | None = None
+        self._pipe_command: str | None = None
+        self._showing_transformed: bool = False
 
     def compose(self) -> ComposeResult:
         type_str = self.msg.message_type.value
@@ -324,6 +356,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
                 )
 
             yield Label("", id="path-label")
+            yield Label("", id="transform-label")
             with ScrollableContainer(id="payload-container"):
                 yield Static(id="payload")
 
@@ -333,9 +366,14 @@ class MessageDetailScreen(ModalScreen[int | None]):
                         placeholder="Path: .user.name or .items[0] (empty to reset)",
                         id="json-path-input",
                     )
+                with Vertical(id="pipe-command-container"):
+                    yield Input(
+                        placeholder="Shell command (payload piped to stdin)",
+                        id="pipe-command-input",
+                    )
 
                 if not self.fullscreen:
-                    hint_parts = ["q: close", "y: copy", "/: query", "jk: scroll"]
+                    hint_parts = ["q: close", "y: copy", "/: query", ":: pipe"]
                     if self.stored.related_index is not None:
                         if self.msg.message_type == MessageType.REQUEST:
                             hint_parts.append("r: response")
@@ -388,13 +426,24 @@ class MessageDetailScreen(ModalScreen[int | None]):
         self.dismiss(None)
 
     def action_dismiss_or_reset(self) -> None:
-        """Escape: reset query if active, otherwise close."""
-        container = self.query_one("#json-path-container")
-        if self._current_path is not None:
+        """Escape: reset transform/query or close."""
+        pipe_container = self.query_one("#pipe-command-container")
+        json_container = self.query_one("#json-path-container")
+
+        # Priority 1: Hide pipe command input if visible
+        if pipe_container.has_class("visible"):
+            pipe_container.remove_class("visible")
+        # Priority 2: Reset transform if showing piped output
+        elif self._showing_transformed:
+            self._reset_from_transform()
+        # Priority 3: Reset JSON path if active
+        elif self._current_path is not None:
             self._reset_to_full_payload()
-            container.remove_class("visible")
-        elif container.has_class("visible"):
-            container.remove_class("visible")
+            json_container.remove_class("visible")
+        # Priority 4: Hide JSON path input if visible
+        elif json_container.has_class("visible"):
+            json_container.remove_class("visible")
+        # Priority 5: Dismiss screen
         else:
             self.dismiss(None)
 
@@ -417,8 +466,11 @@ class MessageDetailScreen(ModalScreen[int | None]):
                 self.notify("No related message found", severity="warning")
 
     def action_copy_payload(self) -> None:
-        """Copy payload to clipboard. Copies query result if path is active."""
-        if self._current_path is not None and self._current_result is not None:
+        """Copy payload to clipboard. Copies transform/query result if active."""
+        if self._showing_transformed and self._pipe_output is not None:
+            copy_to_clipboard(self._pipe_output)
+            self.notify("Copied piped output")
+        elif self._current_path is not None and self._current_result is not None:
             if isinstance(self._current_result, (dict, list)):
                 text = json.dumps(self._current_result, indent=2)
             else:
@@ -465,7 +517,7 @@ class MessageDetailScreen(ModalScreen[int | None]):
         self.notify("Showing full payload")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle JSON path query."""
+        """Handle JSON path query or pipe command."""
         if event.input.id == "json-path-input":
             path = event.value.strip()
             if path:
@@ -475,6 +527,14 @@ class MessageDetailScreen(ModalScreen[int | None]):
                 self._reset_to_full_payload()
                 self.query_one("#json-path-container").remove_class("visible")
                 self.set_focus(None)
+        elif event.input.id == "pipe-command-input":
+            command = event.value.strip()
+            if command:
+                self.run_worker(self._execute_pipe_command(command))
+                self.query_one("#pipe-command-container").remove_class("visible")
+                self.set_focus(None)
+            else:
+                self.query_one("#pipe-command-container").remove_class("visible")
 
     def _execute_json_path(self, path: str) -> None:
         """Execute a JSON path query and show result in main payload panel."""
@@ -547,6 +607,94 @@ class MessageDetailScreen(ModalScreen[int | None]):
                     )
 
         return current
+
+    def action_pipe_command(self) -> None:
+        """Toggle pipe command input."""
+        container = self.query_one("#pipe-command-container")
+        container.toggle_class("visible")
+
+        if container.has_class("visible"):
+            input_widget = self.query_one("#pipe-command-input", Input)
+            input_widget.value = ""
+            input_widget.focus()
+
+    def _get_pipeable_content(self) -> str:
+        """Get content to pipe - query result if active, otherwise full payload."""
+        if self._current_path is not None and self._current_result is not None:
+            if isinstance(self._current_result, (dict, list)):
+                return json.dumps(self._current_result, indent=2)
+            return str(self._current_result)
+        elif self._is_json and self._parsed_json is not None:
+            return json.dumps(self._parsed_json, indent=2)
+        return self.msg.payload
+
+    async def _execute_pipe_command(self, command: str) -> None:
+        """Execute shell command with payload as stdin."""
+        content = self._get_pipeable_content()
+
+        try:
+            process = await asyncio.create_subprocess_shell(
+                command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate(content.encode())
+
+            self._pipe_command = command
+            self._pipe_output = stdout.decode("utf-8", errors="replace")
+
+            if stderr:
+                stderr_text = stderr.decode("utf-8", errors="replace").strip()
+                if stderr_text:
+                    self.notify(f"stderr: {stderr_text[:100]}", severity="warning")
+
+            self._display_pipe_result()
+
+        except Exception as e:
+            self.notify(f"Command failed: {e}", severity="error")
+
+    def _display_pipe_result(self) -> None:
+        """Display the piped command output."""
+        payload_widget = self.query_one("#payload", Static)
+        transform_label = self.query_one("#transform-label", Label)
+
+        self._showing_transformed = True
+        transform_label.update(f"Pipe: {self._pipe_command}")
+        transform_label.add_class("visible")
+
+        output = self._pipe_output or ""
+
+        # Try to detect if output is JSON for syntax highlighting
+        try:
+            parsed = json.loads(output)
+            formatted = json.dumps(parsed, indent=2)
+            syntax = Syntax(
+                formatted, "json", theme=self.preview_theme, line_numbers=False
+            )
+            payload_widget.update(syntax)
+        except (json.JSONDecodeError, TypeError):
+            # Not JSON - display as plain text
+            payload_widget.update(output)
+
+    def _reset_from_transform(self) -> None:
+        """Reset from transformed view back to original."""
+        self._pipe_output = None
+        self._pipe_command = None
+        self._showing_transformed = False
+
+        transform_label = self.query_one("#transform-label", Label)
+        transform_label.update("")
+        transform_label.remove_class("visible")
+
+        # Restore original display (respect JSON path if still active)
+        payload_widget = self.query_one("#payload", Static)
+        if self._current_path is not None:
+            self._execute_json_path(self._current_path)
+        else:
+            self._display_payload(payload_widget, self.msg.payload)
+
+        self.notify("Showing original payload")
 
 
 class DiffScreen(ModalScreen[None]):
