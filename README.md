@@ -1,4 +1,8 @@
-# nnav
+```
+▄▄  ▄▄ ▄▄  ▄▄  ▄▄▄  ▄▄ ▄▄
+███▄██ ███▄██ ██▀██ ██▄██
+██ ▀██ ██ ▀██ ██▀██  ▀█▀
+```
 
 A terminal UI for exploring NATS messages with filtering, request/response matching, and JSON tools inspired by lnav (https://lnav.org/)
 
@@ -6,24 +10,23 @@ To contribute, raise a pull request or open an issue
 
 ## Contents
 
-- [nnav](#nnav)
-  - [Contents](#contents)
-  - [Features](#features)
-  - [Screenshots](#screenshots)
-  - [Limitations](#limitations)
-  - [Installation](#installation)
-  - [Modes](#modes)
-    - [Watch Mode (Default)](#watch-mode-default)
-    - [JetStream Mode](#jetstream-mode)
-      - [Start Positions](#start-positions)
-    - [Headless Mode](#headless-mode)
-  - [Configuration](#configuration)
-  - [File Formats](#file-formats)
-    - [Context Files](#context-files)
-    - [Importing NATS CLI Output](#importing-nats-cli-output)
-  - [Demo](#demo)
-  - [Development](#development)
-  - [License](#license)
+- [Contents](#contents)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Limitations](#limitations)
+- [Installation](#installation)
+- [Modes](#modes)
+  - [Watch Mode (Default)](#watch-mode-default)
+  - [JetStream Mode](#jetstream-mode)
+    - [Start Positions](#start-positions)
+  - [Headless Mode](#headless-mode)
+- [Configuration](#configuration)
+- [File Formats](#file-formats)
+  - [Context Files](#context-files)
+  - [Importing NATS CLI Output](#importing-nats-cli-output)
+- [Demo](#demo)
+- [Development](#development)
+- [License](#license)
 
 ## Features
 
