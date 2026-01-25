@@ -173,6 +173,8 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         self._pending_requests: dict[str, int] = {}
         # Double-press confirmation for clear
         self._last_clear_press: float | None = None
+        # Filter history
+        self._history_file = Path.home() / ".config" / "nnav" / "history.json"
 
     @property
     def filter_text(self) -> str:
@@ -228,9 +230,32 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
 
         self._update_status()
 
+        # Load filter history
+        self._load_filter_history()
+
         # Show JetStream browser on startup if requested
         if self._start_with_jetstream_browser:
             self.call_after_refresh(self._show_jetstream_browser)
+
+    def _load_filter_history(self) -> None:
+        """Load filter history from file."""
+        filter_input = self.query_one("#filter", FilterInput)
+        try:
+            if self._history_file.exists():
+                history = json.loads(self._history_file.read_text())
+                if isinstance(history, list):
+                    filter_input.set_history(history)
+        except (json.JSONDecodeError, OSError):
+            pass  # Silently ignore errors
+
+    def _save_filter_history(self) -> None:
+        """Save filter history to file."""
+        filter_input = self.query_one("#filter", FilterInput)
+        try:
+            self._history_file.parent.mkdir(parents=True, exist_ok=True)
+            self._history_file.write_text(json.dumps(filter_input.get_history()))
+        except OSError:
+            pass  # Silently ignore errors
 
     def _update_status(self) -> None:
         """Update the status bar."""
@@ -466,6 +491,10 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
             )  # Clear tree prefix for manual filters
             self._parse_filter_terms(event.value)
             self._apply_filter()
+            # Add to history and save
+            filter_input = self.query_one("#filter", FilterInput)
+            filter_input.add_to_history(event.value)
+            self._save_filter_history()
             if not event.value:  # Only hide if filter is empty
                 event.input.remove_class("visible")
             self._focus_table()
