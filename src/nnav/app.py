@@ -120,6 +120,8 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         Binding("k", "cursor_up", "Up", show=False),
         Binding("g", "cursor_top", "Top", show=False),
         Binding("G", "cursor_bottom", "Bottom", show=False),
+        Binding("ctrl+d", "page_down", "Page Down", show=False),
+        Binding("ctrl+u", "page_up", "Page Up", show=False),
         Binding("t", "subject_tree", "Subject Tree"),
         Binding("J", "jetstream_browser", "JetStream"),
     ]
@@ -850,6 +852,20 @@ class NatsVisApp(FilterMixin, FullscreenMixin, App[None]):
         """Move cursor to bottom (vim G)."""
         table = self.query_one(DataTable)
         table.move_cursor(row=table.row_count - 1)
+
+    def action_page_down(self) -> None:
+        """Page down (vim ctrl+d)."""
+        if self.tail_mode:
+            self.tail_mode = False
+            self._update_status()
+        self.query_one(DataTable).action_page_down()
+
+    def action_page_up(self) -> None:
+        """Page up (vim ctrl+u)."""
+        if self.tail_mode:
+            self.tail_mode = False
+            self._update_status()
+        self.query_one(DataTable).action_page_up()
 
     def _build_subject_tree(self) -> SubjectNode:
         """Build a tree from all message subjects."""

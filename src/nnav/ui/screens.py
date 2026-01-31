@@ -111,6 +111,8 @@ class HelpScreen(ModalScreen[None]):
             yield Label("  k / ↑      Move up", classes="help-row")
             yield Label("  g          Go to first message", classes="help-row")
             yield Label("  G          Go to last message", classes="help-row")
+            yield Label("  ctrl+d     Page down", classes="help-row")
+            yield Label("  ctrl+u     Page up", classes="help-row")
             yield Label("  Enter      View message details", classes="help-row")
             yield Label("  n          Next bookmarked message", classes="help-row")
             yield Label("  N          Previous bookmarked message", classes="help-row")
